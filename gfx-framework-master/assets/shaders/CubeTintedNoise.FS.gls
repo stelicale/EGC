@@ -1,0 +1,145 @@
+#version 330 core
+// ------------------------------------------------------------
+// Fragment Shader: CubeTintedNoise.FS.glsl
+// Scop: o culoare de bază (uniformă) + textură procedurală subtilă,
+//       ca să "îmbrace" un cub fără a fi perfect uniform.
+// Funcționează fie cu UV-uri, fie (recomandat) cu tri-planar mapping
+// pe poziția în lume + normală.
+// ------------------------------------------------------------
+
+// === INPUTS din Vertex Shader ===
+// Alege una dintre căile de mai jos, în funcție de ce var-uri ai deja.
+// 1) UV mapping (dacă ai coordonate de textură):
+//    layout(location = 0) in vec2 vUV;        // de la VS
+//    #define HAS_UV 1
+//
+// 2) Triplanar (recomandat pentru cub, fără cusături):
+//    layout(location = 1) in vec3 vWorldPos;  // poziția în spațiul lumii din VS
+//    layout(location = 2) in vec3 vNormal;    // normală în spațiul lumii din VS (normalizată)
+//    #define USE_TRIPLANAR 1
+
+#ifdef HAS_UV
+in vec2 vUV;
+#endif
+#ifdef USE_TRIPLANAR
+in vec3 vWorldPos;
+in vec3 vNormal;
+#endif
+
+out vec4 FragColor;
+
+// === UNIFORMS de control ===
+uniform vec3 uColor = vec3(0.85, 0.55, 0.20); // culoarea de bază (ex: "cărămiziu deschis")
+uniform float uIntensity = 0.25;              // cât de puternică e textura (0..1)
+uniform float uScale = 3.0;                    // scară pentru detaliu (mai mare = model mai deasă)
+uniform float uContrast = 1.0;                 // >1 crește contrastul texturii, <1 îl reduce
+uniform float uSeed = 0.0;                     // pentru variații între obiecte
+
+// === Utilitare: hash & noise ===
+float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
+float hash31(vec3 p) {
+    // bazat pe IQ hash – simplu și rapid
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float noise3(vec3 p) {
+    // value-noise simplu pe grilă integeră
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+
+    float n000 = hash31(i);
+    float n100 = hash31(i + vec3(1,0,0));
+    float n010 = hash31(i + vec3(0,1,0));
+    float n110 = hash31(i + vec3(1,1,0));
+    float n001 = hash31(i + vec3(0,0,1));
+    float n101 = hash31(i + vec3(1,0,1));
+    float n011 = hash31(i + vec3(0,1,1));
+    float n111 = hash31(i + vec3(1,1,1));
+
+    // fade (Hermite)
+    vec3 u = f*f*(3.0-2.0*f);
+
+    float nx00 = mix(n000, n100, u.x);
+    float nx10 = mix(n010, n110, u.x);
+    float nx01 = mix(n001, n101, u.x);
+    float nx11 = mix(n011, n111, u.x);
+
+    float nxy0 = mix(nx00, nx10, u.y);
+    float nxy1 = mix(nx01, nx11, u.y);
+
+    return mix(nxy0, nxy1, u.z);
+}
+
+float fbm(vec3 p) {
+    // fractal Brownian motion – straturi de noise la scară diferită
+    float a = 0.5;
+    float f = 0.0;
+    for (int i = 0; i < 5; ++i) {
+        f += a * noise3(p);
+        p *= 2.03;
+        a *= 0.52;
+    }
+    return f;
+}
+
+// Proiecție tri-planară – amestecă 3 proiecții ortogonale în funcție de normală
+vec3 triplanarTex(vec3 wp, vec3 n, float scale) {
+    vec3 an = abs(normalize(n));
+    an = max(an, vec3(1e-5));
+    an /= (an.x + an.y + an.z);
+
+    // Proiecții pe XY, XZ, YZ
+    float tx = fbm(vec3(wp.yz * scale, uSeed));
+    float ty = fbm(vec3(wp.xz * scale, uSeed + 11.0));
+    float tz = fbm(vec3(wp.xy * scale, uSeed + 23.0));
+
+    float t = tx * an.x + ty * an.y + tz * an.z;
+    return vec3(t);
+}
+
+void main() {
+    // 1) Semnal de textură procedurală în [0,1]
+    float texSignal = 0.0;
+
+#ifdef USE_TRIPLANAR
+    // fără cusături pe cub; folosește poziția în lume și normala
+    texSignal = triplanarTex(vWorldPos, vNormal, uScale);
+#elif defined(HAS_UV)
+    // fallback simplu pe UV (convertim în 3D punând UV pe XY + seed pe Z)
+    vec3 p = vec3(vUV * uScale, uSeed);
+    texSignal = fbm(p);
+#else
+    // fallback minimal: folosește coordonate de ecran (nu ideal, dar previne erorile de linkare)
+    vec2 g = gl_FragCoord.xy / max(1.0, float(800));
+    texSignal = fbm(vec3(g * uScale, uSeed));
+#endif
+
+    // 2) Opțional, ajustare de contrast
+    texSignal = clamp(texSignal, 0.0, 1.0);
+    if (uContrast != 1.0) {
+        texSignal = pow(texSignal, 1.0 / max(0.0001, uContrast));
+    }
+
+    // 3) Amestecăm culoarea de bază cu variația procedurală (doar intensitate pe luminozitate)
+    //    Model: colorOut = base * (1 - k) + base * t * k = base * (1 - k + k*t)
+    float k = clamp(uIntensity, 0.0, 1.0);
+    vec3 base = uColor;
+    vec3 varied = base * (1.0 - k + k * texSignal);
+
+    // 4) Ușoară auto-"shading" folosind normală (dacă există), ca să dea volum
+#ifdef USE_TRIPLANAR
+    vec3 lightDir = normalize(vec3(0.5, 0.8, 0.2));
+    float ndl = clamp(dot(normalize(vNormal), lightDir)*0.5 + 0.5, 0.0, 1.0);
+    varied *= mix(0.9, 1.1, ndl);
+#endif
+
+    FragColor = vec4(varied, 1.0);
+}

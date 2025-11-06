@@ -1,0 +1,6 @@
+# normalizează automat text => LF în repo
+* text=auto
+
+# sau pentru fișiere C++ specific:
+*.hpp text eol=lf
+*.cpp text eol=lf
