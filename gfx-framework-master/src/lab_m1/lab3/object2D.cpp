@@ -39,7 +39,6 @@ Mesh* object2D::CreateSquare(
     square->InitFromData(vertices, indices);
     return square;
 }
-
 Mesh* object2D::CreateRectangle(
     const std::string& name,
     glm::vec3 leftBottomCorner,
