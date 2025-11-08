@@ -122,6 +122,11 @@ class WindowObject
     double elapsedTime;
     double deltaFrameTime;
 
+    // FPS title update
+    std::string baseTitle;     // original window title
+    double fpsTimer = 0.0;     // seconds accumulated
+    int fpsCounter = 0;        // frames accumulated
+
     // Window state and events
     bool hiddenPointer;
     bool resizeEvent;

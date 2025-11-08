@@ -50,6 +50,9 @@ WindowObject::WindowObject(WindowProperties properties)
     deltaFrameTime = 0;
     props.aspectRatio = float(props.resolution.x) / props.resolution.y;
 
+    // Preserve base title for FPS updates
+    baseTitle = props.name;
+
     // Set context version, meaning 3.3 core profile
     glfwWindowHint(GLFW_VISIBLE, props.visible);
 
@@ -193,6 +196,19 @@ void WindowObject::ComputeFrameTime()
     double currentTime = Engine::GetElapsedTime();
     deltaFrameTime = currentTime - elapsedTime;
     elapsedTime = currentTime;
+
+    // FPS accumulation
+    fpsCounter++;
+    fpsTimer += deltaFrameTime;
+    if (fpsTimer >= 0.5) // update every 0.5s for stability
+    {
+        double fps = fpsCounter / fpsTimer;
+        char title[128];
+        snprintf(title, sizeof(title), "%s - %.0f FPS", baseTitle.c_str(), fps);
+        glfwSetWindowTitle(window->handle, title);
+        fpsCounter = 0;
+        fpsTimer = 0.0;
+    }
 }
 
 

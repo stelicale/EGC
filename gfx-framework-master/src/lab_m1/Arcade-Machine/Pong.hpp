@@ -2,8 +2,8 @@
 
 #include "components/simple_scene.h"
 #include "components/text_renderer.h"
-#include <vector>
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace m1
 {
@@ -62,7 +62,7 @@ namespace m1
         float ballSize = fmin(baseResolution.x, baseResolution.y) / 72;
         float ballSpeed = 400.0f; // units per second
         float maxBallSpeed = 4000.0f; // cap for ballSpeed regardless of ball
-        float speedupCooldownInterval = 0.2;
+        float speedupCooldownInterval = 0.2f;
         struct Ball
         {
             glm::vec2 pos;

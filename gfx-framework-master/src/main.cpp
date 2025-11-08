@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     wp.resolution = glm::ivec2(1280, 720);
     wp.vSync = true;
     wp.selfDir = GetParentDir(std::string(argv[0]));
-    wp.name = "10/10";
+    wp.name = "N-are conversatie furnica cu bocancul";
 
     // Init the Engine and create a new window with the defined properties
     (void)Engine::Init(wp);

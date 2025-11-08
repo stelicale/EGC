@@ -1,11 +1,10 @@
-#include <iostream>
-#include <climits>
-#include <unordered_map>
-#include <algorithm>
 #include <glm/gtc/matrix_inverse.hpp>
 #include "lab_m1/Arcade-Machine/Pong.hpp"
 #include "lab_m1/lab3/transform2D.h"
 #include "lab_m1/lab3/object2D.h"
+#include <climits>
+#include <unordered_map>
+#include <algorithm>
 
 using namespace m1;
 
