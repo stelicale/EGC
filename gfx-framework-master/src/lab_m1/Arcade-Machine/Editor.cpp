@@ -1,5 +1,6 @@
 ﻿#include <glm/gtc/matrix_inverse.hpp>
 #include "lab_m1/Arcade-Machine/Editor.hpp"
+#include "lab_m1/Arcade-Machine/Pong.hpp"
 #include "lab_m1/lab3/transform2D.h"
 #include "lab_m1/lab3/object2D.h"
 #include <stack>
@@ -33,6 +34,8 @@ void Editor::Init()
     AddMeshToList(tileBoard);
     Mesh *status = object2D::CreateSquare("status", glm::vec3(0, 0, 0), statusSize, statusColor, true);
     AddMeshToList(status);
+
+    readyCircleColor = circleColor;
 }
 
 void Editor::FrameStart()
@@ -61,139 +64,13 @@ void Editor::Update(float deltaTimeSeconds)
         return;
     }
 
-    // Dynamic ready circle color based on placement validity and at least one block placed
-    bool valid = correctPlacement();
-    readyCircleColor = (valid ? glm::vec3(0, 0.5f, 0) : glm::vec3(0.5f, 0, 0));
-
-    // Draw ready circle (top-right)
-    glm::mat3 modelMatrix = glm::mat3(1);
-    modelMatrix *= transform2D::Translate(circleCenter.x, circleCenter.y);
-
-    // Render with override color so it reflects current state
-    RenderMesh2D(meshes["circle"], modelMatrix, readyCircleColor);
-
-    // Status bar: render only statusRemaining squares, left-to-right visually (we track removal from right in logic)
-    float statusStartX = margin + partSize.x + 2 * margin;
-    float statusY = circleCenter.y - statusSize / 2; // center vertically with circle
-    for (int i = 0; i < statusRemaining; i++)
-    {
-        float x = statusStartX + i * (statusSize + 2 * statusSpacing);
-        float y = statusY;
-        glm::mat3 statusModel = glm::mat3(1);
-        statusModel *= transform2D::Translate(x, y);
-        RenderMesh2D(meshes["status"], shaders["VertexColor"], statusModel);
-    }
-
-    // Left panel parts
-    for (int i = 0; i < partCount; i++)
-    {
-        float y = margin + i * partSize.y;
-        glm::mat3 partModel = glm::mat3(1);
-        partModel *= transform2D::Translate(margin, y);
-        partModel *= transform2D::Scale(partSize.x / tileSize, partSize.y / tileSize);
-        RenderMesh2D(meshes["part"], shaders["VertexColor"], partModel);
-    }
-
-    glm::mat3 boardModel(1);
-    boardModel *= transform2D::Translate(boardX, boardY);
-    RenderMesh2D(meshes["tileBoard"], shaders["VertexColor"], boardModel);
-
-    // Tile grid
-    float startX = boardX + margin;
-    float startY = boardY + margin;
-
-    for (int r = 0; r < tilesPerCol; r++)
-    {
-        for (int c = 0; c < tilesPerRow; c++)
-        {
-            float x = startX + c * (tileSize + 2 * tileSpacing);
-            float y = startY + r * (tileSize + 2 * tileSpacing);
-
-            tiles[r][c].downLeft = glm::vec2(x, y);
-            tiles[r][c].upRight = glm::vec2(x + tileSize, y + tileSize);
-
-            glm::mat3 tileModel(1);
-            tileModel *= transform2D::Translate(x, y);
-
-            if (r == 5 && c == 9)
-            {
-                RenderMesh2D(meshes["tile"], tileModel, mandatoryTileColor);
-            }
-            else
-            {
-                RenderMesh2D(meshes["tile"], shaders["VertexColor"], tileModel);
-            }
-        }
-    }
-
-    // Draggable blocks (left panel)
-    modelMatrix = glm::mat3(1);
-    modelMatrix *= transform2D::Translate(solidX, solidY);
-    RenderMesh2D(meshes["solid"], shaders["VertexColor"], modelMatrix);
-
-    modelMatrix = glm::mat3(1);
-    modelMatrix *= transform2D::Translate(cannonX, cannonY);
-    RenderMesh2D(meshes["cannon"], shaders["VertexColor"], modelMatrix);
-
-    modelMatrix = glm::mat3(1);
-    modelMatrix *= transform2D::Translate(bumperX, bumperY);
-    RenderMesh2D(meshes["bumper"], shaders["VertexColor"], modelMatrix);
-
-    // Placed blocks
-    for (const auto &block : placedBlocks)
-    {
-        glm::vec2 center = getTileCenter(block.row, block.col);
-        modelMatrix = glm::mat3(1);
-
-        switch (block.type)
-        {
-        case BlockType::SOLID:
-            modelMatrix *= transform2D::Translate(center.x - blockSize / 2, center.y - blockSize / 2);
-            RenderMesh2D(meshes["solid"], shaders["VertexColor"], modelMatrix);
-            break;
-        case BlockType::CANNON:
-        {
-            // We stored middle square row in block.row; bottom row is row-1, top is row+1
-            float baseY = getTileCenter(block.row, block.col).y - 3 * blockSize / 2; // bottom-left origin
-            float baseX = center.x - blockSize / 2;
-            modelMatrix *= transform2D::Translate(baseX, baseY);
-            RenderMesh2D(meshes["cannon"], shaders["VertexColor"], modelMatrix);
-            break;
-        }
-        case BlockType::BUMPER:
-        {
-            // block.row is the row of the SQUARE part
-            glm::vec2 squareCenter = getTileCenter(block.row, block.col);
-            modelMatrix *= transform2D::Translate(squareCenter.x, squareCenter.y + blockSize / 2);
-            RenderMesh2D(meshes["bumper"], shaders["VertexColor"], modelMatrix);
-            break;
-        }
-        default:
-            break;
-        }
-    }
-
-    // Dragged object LAST
-    if (draggedBlock != NONE)
-    {
-        modelMatrix = glm::mat3(1);
-        // dragPosition is based on the demo object's origin; we leave it as visual only
-        modelMatrix *= transform2D::Translate(dragPosition.x, dragPosition.y);
-        switch (draggedBlock)
-        {
-        case SOLID:
-            RenderMesh2D(meshes["solid"], shaders["VertexColor"], modelMatrix);
-            break;
-        case CANNON:
-            RenderMesh2D(meshes["cannon"], shaders["VertexColor"], modelMatrix);
-            break;
-        case BUMPER:
-            RenderMesh2D(meshes["bumper"], shaders["VertexColor"], modelMatrix);
-            break;
-        default:
-            break;
-        }
-    }
+    UpdateReadyCircleColor();
+    RenderReadyCircle();
+    RenderStatusBar();
+    RenderLeftPanelBlocks();
+    RenderTileGrid();
+    RenderPlacedBlocks();
+    RenderDraggedBlock();
 }
 
 void Editor::FrameEnd()
@@ -263,15 +140,17 @@ void Editor::OnMouseBtnPress(int mouseX, int mouseY, int button, int mods)
             if (!pong)
                 pong = new Pong();
             // Pass to pong BEFORE Init to ensure meshes exist when it starts
-            std::vector<m1::ShipBlock> ship;
+            std::vector<Pong::ShipBlock> ship;
             ship.reserve(placedBlocks.size());
             for (const auto &pb : placedBlocks)
             {
-                m1::ShipBlock sb;
+                if (pb.type == NONE)
+                    continue;
+
+                Pong::ShipBlock sb;
                 sb.row = pb.row;
                 sb.col = pb.col;
-                sb.anchor = pb.anchor;
-                sb.type = (pb.type == SOLID ? m1::ShipBlockType::SOLID : (pb.type == CANNON ? m1::ShipBlockType::CANNON : m1::ShipBlockType::BUMPER));
+                sb.type = static_cast<Pong::ShipBlockType>(pb.type - 1);
                 ship.push_back(sb);
             }
             pong->SetShipLayout(ship, blockSize);
@@ -337,187 +216,26 @@ void Editor::OnMouseBtnRelease(int mouseX, int mouseY, int button, int mods)
     {
         if (draggedBlock != NONE)
         {
-            // If no status left, block placement
             if (statusRemaining <= 0)
             {
-                draggedBlock = NONE;
+                ResetDragState();
                 return;
             }
 
-            // Block was being dragged
-            glm::vec2 scenePos = screenToScene(mouseX, mouseY);
-            int row, col;
-
-            bool placed = false;
-            PlacedBlock newBlock;
-            newBlock.type = draggedBlock;
-            newBlock.anchor = dragAnchor;
-
-            if (draggedBlock == BUMPER)
-            {
-                // Use the dragged mesh origin (base of semi-oval) to derive the square center
-                glm::vec2 dropOrigin = scenePos - dragOffset; // current mesh origin while dragging
-                glm::vec2 squareCenterPoint(dropOrigin.x, dropOrigin.y - blockSize / 2.0f);
-                if (getTileAtPosition(squareCenterPoint, row, col))
-                {
-                    // Candidate cells for bumper
-                    std::vector<std::pair<int, int>> cells;
-                    cells.push_back(std::make_pair(row, col));
-                    cells.push_back(std::make_pair(row + 1, col));
-                    cells.push_back(std::make_pair(row + 1, col - 1));
-                    cells.push_back(std::make_pair(row + 1, col + 1));
-
-                    // Check all bumper tiles are in-bounds and free
-                    if (occupancy[row][col] == 0 &&
-                        occupancy[row + 1][col] == 0 &&
-                        occupancy[row + 1][col - 1] == 0 &&
-                        occupancy[row + 1][col + 1] == 0)
-                    {
-                        // Check restrictions vs existing bumpers/cannons below
-                        if (!violatesAboveRestrictions(cells))
-                        {
-                            // Also ensure no existing blocks strictly above new bumper in its 3 columns
-                            int topRow = row + 1;
-                            if (noBlocksAboveInRestrictedColumns(topRow, col - 1, col + 1))
-                            {
-                                newBlock.row = row;
-                                newBlock.col = col;
-                                placedBlocks.push_back(newBlock); // store the square part
-                                updateOccupancyForBlock(placedBlocks.back(), 1);
-                                placed = true;
-                            }
-                        }
-                    }
-                }
-            }
-            else if (getTileAtPosition(scenePos, row, col))
-            {
-                if (draggedBlock == CANNON)
-                {
-                    // bottom anchors at row, middle at row-1, top at row-2
-                    int targetRow = row - dragAnchor;
-                    // Candidate cells for cannon
-                    int cBottom = targetRow;
-                    int cMid = targetRow + 1;
-                    int cTop = targetRow + 2;
-                    std::vector<std::pair<int, int>> cells;
-                    cells.push_back(std::make_pair(cBottom, col));
-                    cells.push_back(std::make_pair(cMid, col));
-                    cells.push_back(std::make_pair(cTop, col));
-
-                    // Check bounds and occupancy for all 3 tiles
-                    if (targetRow >= 0 && targetRow + 2 < tilesPerCol &&
-                        occupancy[targetRow][col] == 0 &&
-                        occupancy[targetRow + 1][col] == 0 &&
-                        occupancy[targetRow + 2][col] == 0)
-                    {
-                        // Check restrictions vs existing bumpers/cannons below
-                        if (!violatesAboveRestrictions(cells))
-                        {
-                            // Ensure no existing blocks strictly above new cannon in its column
-                            if (noBlocksAboveInRestrictedColumns(targetRow + 2, col, col))
-                            {
-                                newBlock.row = targetRow + 1; // store the middle square row
-                                newBlock.col = col;
-                                placedBlocks.push_back(newBlock);
-                                updateOccupancyForBlock(placedBlocks.back(), 1);
-                                placed = true;
-                            }
-                        }
-                    }
-                }
-                else if (draggedBlock == SOLID)
-                {
-                    // Candidate cells for solid
-                    std::vector<std::pair<int, int>> cells;
-                    cells.push_back(std::make_pair(row, col));
-
-                    if (occupancy[row][col] == 0 && !violatesAboveRestrictions(cells))
-                    {
-                        newBlock.row = row;
-                        newBlock.col = col;
-                        placedBlocks.push_back(newBlock);
-                        updateOccupancyForBlock(placedBlocks.back(), 1);
-                        placed = true;
-                    }
-                }
-            }
-
-            if (placed)
+            const glm::vec2 scenePos = screenToScene(mouseX, mouseY);
+            if (TryPlaceDraggedBlock(scenePos))
             {
                 statusRemaining = std::max(0, statusRemaining - 1);
             }
 
-            draggedBlock = NONE;
+            ResetDragState();
         }
     }
 
     if (IS_BIT_SET(button, GLFW_MOUSE_BUTTON_RIGHT))
     {
-        // Right click to remove placed block and restore one status
-        glm::vec2 scenePos = screenToScene(mouseX, mouseY);
-        int tileRow = -1, tileCol = -1;
-        bool hitTile = getTileAtPosition(scenePos, tileRow, tileCol);
-
-        int blockIdx = -1;
-        for (int i = (int)placedBlocks.size() - 1; i >= 0 && blockIdx == -1; --i)
-        {
-            const auto &pb = placedBlocks[i];
-            bool hit = false;
-
-            if (pb.type == BUMPER)
-            {
-                // Test square part first
-                const auto &baseTile = tiles[pb.row][pb.col];
-                bool inSquare = (scenePos.x >= baseTile.downLeft.x && scenePos.x <= baseTile.upRight.x &&
-                                 scenePos.y >= baseTile.downLeft.y && scenePos.y <= baseTile.upRight.y);
-                if (inSquare)
-                {
-                    hit = true;
-                }
-                else
-                {
-                    // Test semi-oval part
-                    glm::vec2 squareCenter = getTileCenter(pb.row, pb.col);
-                    float centerX = squareCenter.x;
-                    float centerY = squareCenter.y + blockSize / 2.0f; // center of semi-oval
-                    if (scenePos.y >= centerY)
-                    {
-                        float ovalRadiusX = 1.5f * blockSize;
-                        float ovalRadiusY = blockSize;
-                        float dx = (scenePos.x - centerX) / ovalRadiusX;
-                        float dy = (scenePos.y - centerY) / ovalRadiusY;
-                        if (dx * dx + dy * dy <= 1.0f)
-                        {
-                            hit = true;
-                        }
-                    }
-                }
-            }
-            else if (hitTile)
-            {
-                if (pb.type == SOLID)
-                {
-                    if (tileRow == pb.row && tileCol == pb.col)
-                        hit = true;
-                }
-                else if (pb.type == CANNON)
-                {
-                    if (tileCol == pb.col && (tileRow == pb.row || tileRow == pb.row - 1 || tileRow == pb.row + 1))
-                        hit = true;
-                }
-            }
-
-            if (hit)
-                blockIdx = i;
-        }
-
-        if (blockIdx != -1)
-        {
-            updateOccupancyForBlock(placedBlocks[blockIdx], 0);
-            placedBlocks.erase(placedBlocks.begin() + blockIdx);
-            statusRemaining = std::min(StatusCount, statusRemaining + 1);
-        }
+        const glm::vec2 scenePos = screenToScene(mouseX, mouseY);
+        RemoveBlockAtPosition(scenePos);
     }
 }
 
@@ -530,9 +248,7 @@ void Editor::OnMouseScroll(int mouseX, int mouseY, int offsetX, int offsetY)
     }
 }
 
-void Editor::OnWindowResize(int width, int height)
-{
-}
+void Editor::OnWindowResize(int width, int height) { }
 
 bool Editor::checkReady(int mouseX, int mouseY)
 {
@@ -541,7 +257,9 @@ bool Editor::checkReady(int mouseX, int mouseY)
         return false;
 
     glm::vec2 scenePos = screenToScene(mouseX, mouseY);
-    return glm::length(scenePos - circleCenter) <= circleRadius;
+    glm::vec2 diff = scenePos - circleCenter;
+    float distSquared = diff.x * diff.x + diff.y * diff.y;
+    return distSquared <= circleRadius * circleRadius;
 }
 
 glm::vec2 Editor::screenToScene(int mouseX, int mouseY)
@@ -551,9 +269,10 @@ glm::vec2 Editor::screenToScene(int mouseX, int mouseY)
     if (res.x <= 0 || res.y <= 0)
         return glm::vec2(0, 0);
 
-    float sceneX = (static_cast<float>(mouseX) / static_cast<float>(res.x)) * static_cast<float>(baseResolution.x);
-    // Invert Y coordinate because window Y=0 is top, scene Y=0 is bottom
-    float sceneY = (static_cast<float>(res.y - mouseY) / static_cast<float>(res.y)) * static_cast<float>(baseResolution.y);
+    float invResX = 1.0f / res.x;
+    float invResY = 1.0f / res.y;
+    float sceneX = mouseX * invResX * baseResolution.x;
+    float sceneY = (res.y - mouseY) * invResY * baseResolution.y;
 
     return glm::vec2(sceneX, sceneY);
 }
@@ -615,7 +334,7 @@ Editor::BlockType Editor::getBlockAtPosition(glm::vec2 scenePos)
     return NONE;
 }
 
-bool Editor::getTileAtPosition(glm::vec2 scenePos, int &row, int &col)
+bool Editor::getTileAtPosition(glm::vec2 scenePos, int &row, int &col) const
 {
     // Check if position is within the tile grid bounds
     for (int r = 0; r < tilesPerCol; r++)
@@ -634,7 +353,7 @@ bool Editor::getTileAtPosition(glm::vec2 scenePos, int &row, int &col)
     return false;
 }
 
-glm::vec2 Editor::getTileCenter(int row, int col)
+glm::vec2 Editor::getTileCenter(int row, int col) const
 {
     // Calculate the position where blocks should be placed on this tile
     // Each block type has different reference points, so we center them on the tile
@@ -646,19 +365,6 @@ glm::vec2 Editor::getTileCenter(int row, int col)
 
     // Return center of tile - blocks will be adjusted based on their type during rendering
     return glm::vec2(tileCenterX, tileCenterY);
-}
-
-int Editor::findPlacedBlockAt(int row, int col)
-{
-    // Search from last to first to match top-most block when overlapping shapes extend over tiles
-    for (int i = (int)placedBlocks.size() - 1; i >= 0; --i)
-    {
-        const auto &pb = placedBlocks[i];
-        if (row == pb.row && col == pb.col)
-            return i;
-        break;
-    }
-    return -1;
 }
 
 bool Editor::correctPlacement()
@@ -685,6 +391,7 @@ bool Editor::correctPlacement()
     // Mandatory center tile must be filled so the constructed ship has its core.
     if (!occupancy[midR][midC])
         return false;
+    // DFS
     std::stack<std::pair<int, int>> stk;
     std::vector<std::vector<int>> vis(rows, std::vector<int>(cols, 0));
     for (int r = 0; r < rows; ++r)
@@ -706,7 +413,6 @@ bool Editor::correctPlacement()
     int visited = 0;
     const int dr[4] = {1, -1, 0, 0};
     const int dc[4] = {0, 0, 1, -1};
-    // Depth-first traversal ensures the occupied set forms a single 4-connected cluster.
     while (!stk.empty())
     {
         auto cur = stk.top();
@@ -798,4 +504,364 @@ void Editor::updateOccupancyForBlock(const PlacedBlock &block, int value)
     default:
         break;
     }
+}
+
+void Editor::UpdateReadyCircleColor()
+{
+    readyCircleColor = correctPlacement() ? glm::vec3(0.0f, 0.5f, 0.0f) : glm::vec3(0.5f, 0.0f, 0.0f);
+}
+
+void Editor::RenderReadyCircle()
+{
+    glm::mat3 model(1.0f);
+    model *= transform2D::Translate(circleCenter.x, circleCenter.y);
+    RenderMesh2D(meshes["circle"], model, readyCircleColor);
+}
+
+void Editor::RenderStatusBar()
+{
+    for (int i = 0; i < statusRemaining; ++i)
+    {
+        RenderStatusSquare(i);
+    }
+}
+
+void Editor::RenderStatusSquare(int index)
+{
+    const float statusStartX = margin + partSize.x + 2.0f * margin;
+    const float statusY = circleCenter.y - statusSize * 0.5f;
+    const float x = statusStartX + index * (statusSize + 2.0f * statusSpacing);
+
+    if (index >= 0 && index < static_cast<int>(statusParts.size()))
+    {
+        statusParts[index].downLeft = glm::vec2(x, statusY);
+        statusParts[index].upRight = glm::vec2(x + statusSize, statusY + statusSize);
+    }
+
+    glm::mat3 statusModel(1.0f);
+    statusModel *= transform2D::Translate(x, statusY);
+    RenderMesh2D(meshes["status"], shaders["VertexColor"], statusModel);
+}
+
+void Editor::RenderLeftPanelBlocks()
+{
+    for (int i = 0; i < partCount; ++i)
+    {
+        const float y = margin + i * partSize.y;
+        glm::mat3 partModel(1.0f);
+        partModel *= transform2D::Translate(margin, y);
+        partModel *= transform2D::Scale(partSize.x / tileSize, partSize.y / tileSize);
+        RenderMesh2D(meshes["part"], shaders["VertexColor"], partModel);
+    }
+
+    glm::mat3 model(1.0f);
+    model *= transform2D::Translate(solidX, solidY);
+    RenderMesh2D(meshes["solid"], shaders["VertexColor"], model);
+
+    model = glm::mat3(1.0f);
+    model *= transform2D::Translate(cannonX, cannonY);
+    RenderMesh2D(meshes["cannon"], shaders["VertexColor"], model);
+
+    model = glm::mat3(1.0f);
+    model *= transform2D::Translate(bumperX, bumperY);
+    RenderMesh2D(meshes["bumper"], shaders["VertexColor"], model);
+}
+
+void Editor::RenderTileGrid()
+{
+    glm::mat3 boardModel(1.0f);
+    boardModel *= transform2D::Translate(boardX, boardY);
+    RenderMesh2D(meshes["tileBoard"], shaders["VertexColor"], boardModel);
+
+    const float startX = boardX + margin;
+    const float startY = boardY + margin;
+    const int mandatoryRow = tilesPerCol / 2;
+    const int mandatoryCol = tilesPerRow / 2;
+
+    for (int r = 0; r < tilesPerCol; ++r)
+    {
+        for (int c = 0; c < tilesPerRow; ++c)
+        {
+            const float x = startX + c * (tileSize + 2.0f * tileSpacing);
+            const float y = startY + r * (tileSize + 2.0f * tileSpacing);
+
+            tiles[r][c].downLeft = glm::vec2(x, y);
+            tiles[r][c].upRight = glm::vec2(x + tileSize, y + tileSize);
+
+            glm::mat3 tileModel(1.0f);
+            tileModel *= transform2D::Translate(x, y);
+
+            if (r == mandatoryRow && c == mandatoryCol)
+            {
+                RenderMesh2D(meshes["tile"], tileModel, mandatoryTileColor);
+            }
+            else
+            {
+                RenderMesh2D(meshes["tile"], shaders["VertexColor"], tileModel);
+            }
+        }
+    }
+}
+
+void Editor::RenderPlacedBlocks()
+{
+    for (const auto &block : placedBlocks)
+    {
+        RenderBlockMeshes(block);
+    }
+}
+
+void Editor::RenderBlockMeshes(const PlacedBlock &block)
+{
+    glm::mat3 model(1.0f);
+
+    switch (block.type)
+    {
+    case BlockType::SOLID:
+    {
+        const glm::vec2 center = getTileCenter(block.row, block.col);
+        model *= transform2D::Translate(center.x - blockSize * 0.5f, center.y - blockSize * 0.5f);
+        RenderMesh2D(meshes["solid"], shaders["VertexColor"], model);
+        break;
+    }
+    case BlockType::CANNON:
+    {
+        const glm::vec2 middleCenter = getTileCenter(block.row, block.col);
+        const float baseX = middleCenter.x - blockSize * 0.5f;
+        const float baseY = middleCenter.y - 1.5f * blockSize;
+        model *= transform2D::Translate(baseX, baseY);
+        RenderMesh2D(meshes["cannon"], shaders["VertexColor"], model);
+        break;
+    }
+    case BlockType::BUMPER:
+    {
+        const glm::vec2 squareCenter = getTileCenter(block.row, block.col);
+        model *= transform2D::Translate(squareCenter.x, squareCenter.y + blockSize * 0.5f);
+        RenderMesh2D(meshes["bumper"], shaders["VertexColor"], model);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void Editor::RenderDraggedBlock()
+{
+    if (draggedBlock == NONE)
+        return;
+
+    glm::mat3 model(1.0f);
+    model *= transform2D::Translate(dragPosition.x, dragPosition.y);
+
+    switch (draggedBlock)
+    {
+    case SOLID:
+        RenderMesh2D(meshes["solid"], shaders["VertexColor"], model);
+        break;
+    case CANNON:
+        RenderMesh2D(meshes["cannon"], shaders["VertexColor"], model);
+        break;
+    case BUMPER:
+        RenderMesh2D(meshes["bumper"], shaders["VertexColor"], model);
+        break;
+    default:
+        break;
+    }
+}
+
+bool Editor::TryPlaceDraggedBlock(const glm::vec2 &scenePos)
+{
+    if (draggedBlock == NONE)
+        return false;
+
+    PlacedBlock candidate;
+    candidate.type = draggedBlock;
+    candidate.anchor = dragAnchor;
+
+    if (draggedBlock == BUMPER)
+    {
+        const glm::vec2 dropOrigin = scenePos - dragOffset;
+        if (TryPlaceBumper(dropOrigin, candidate))
+        {
+            CommitBlockPlacement(candidate);
+        }
+        return true;
+    }
+
+    int row = 0;
+    int col = 0;
+    if (!getTileAtPosition(scenePos, row, col))
+        return false;
+
+    if (draggedBlock == SOLID)
+    {
+        if (TryPlaceSolid(row, col, candidate))
+        {
+            CommitBlockPlacement(candidate);
+        }
+        return true;
+    }
+
+    if (draggedBlock == CANNON && TryPlaceCannon(row, col, candidate))
+    {
+        CommitBlockPlacement(candidate);
+        return true;
+    }
+
+    return true;
+}
+
+bool Editor::TryPlaceSolid(int row, int col, PlacedBlock &outBlock) const
+{
+    if (row < 0 || row >= tilesPerCol || col < 0 || col >= tilesPerRow)
+        return false;
+    if (occupancy[row][col] != 0)
+        return false;
+
+    std::vector<std::pair<int, int>> footprint = {{row, col}};
+    if (violatesAboveRestrictions(footprint))
+        return false;
+
+    outBlock.row = row;
+    outBlock.col = col;
+    return true;
+}
+
+bool Editor::TryPlaceCannon(int dropRow, int col, PlacedBlock &outBlock) const
+{
+    if (col < 0 || col >= tilesPerRow)
+        return false;
+
+    const int targetRow = dropRow - dragAnchor;
+    if (targetRow < 0 || targetRow + 2 >= tilesPerCol)
+        return false;
+
+    if (occupancy[targetRow][col] != 0 ||
+        occupancy[targetRow + 1][col] != 0 ||
+        occupancy[targetRow + 2][col] != 0)
+    {
+        return false;
+    }
+
+    std::vector<std::pair<int, int>> footprint = {
+        {targetRow, col},
+        {targetRow + 1, col},
+        {targetRow + 2, col}};
+
+    if (violatesAboveRestrictions(footprint))
+        return false;
+
+    if (!noBlocksAboveInRestrictedColumns(targetRow + 2, col, col))
+        return false;
+
+    outBlock.row = targetRow + 1;
+    outBlock.col = col;
+    outBlock.anchor = dragAnchor;
+    return true;
+}
+
+bool Editor::TryPlaceBumper(const glm::vec2 &dropOrigin, PlacedBlock &outBlock) const
+{
+    const glm::vec2 squareCenterPoint(dropOrigin.x, dropOrigin.y - blockSize * 0.5f);
+    int row = 0;
+    int col = 0;
+    if (!getTileAtPosition(squareCenterPoint, row, col))
+        return false;
+
+    if (row < 0 || row + 1 >= tilesPerCol || col <= 0 || col + 1 >= tilesPerRow)
+        return false;
+
+    if (occupancy[row][col] != 0 ||
+        occupancy[row + 1][col] != 0 ||
+        occupancy[row + 1][col - 1] != 0 ||
+        occupancy[row + 1][col + 1] != 0)
+    {
+        return false;
+    }
+
+    std::vector<std::pair<int, int>> footprint = {
+        {row, col},
+        {row + 1, col},
+        {row + 1, col - 1},
+        {row + 1, col + 1}};
+
+    if (violatesAboveRestrictions(footprint))
+        return false;
+
+    if (!noBlocksAboveInRestrictedColumns(row + 1, col - 1, col + 1))
+        return false;
+
+    outBlock.row = row;
+    outBlock.col = col;
+    outBlock.anchor = dragAnchor;
+    return true;
+}
+
+void Editor::CommitBlockPlacement(const PlacedBlock &block)
+{
+    placedBlocks.push_back(block);
+    updateOccupancyForBlock(placedBlocks.back(), 1);
+}
+
+bool Editor::RemoveBlockAtPosition(const glm::vec2 &scenePos)
+{
+    int tileRow = -1;
+    int tileCol = -1;
+    const bool hitTile = getTileAtPosition(scenePos, tileRow, tileCol);
+
+    for (int i = static_cast<int>(placedBlocks.size()) - 1; i >= 0; --i)
+    {
+        if (HitTestBlock(placedBlocks[i], scenePos, hitTile ? tileRow : -1, hitTile ? tileCol : -1))
+        {
+            updateOccupancyForBlock(placedBlocks[i], 0);
+            placedBlocks.erase(placedBlocks.begin() + i);
+            statusRemaining = std::min(StatusCount, statusRemaining + 1);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Editor::HitTestBlock(const PlacedBlock &block, const glm::vec2 &scenePos, int tileRow, int tileCol) const
+{
+    switch (block.type)
+    {
+    case BlockType::BUMPER:
+    {
+        const Square &baseTile = tiles[block.row][block.col];
+        const bool inSquare = (scenePos.x >= baseTile.downLeft.x && scenePos.x <= baseTile.upRight.x &&
+                               scenePos.y >= baseTile.downLeft.y && scenePos.y <= baseTile.upRight.y);
+        if (inSquare)
+            return true;
+
+        const glm::vec2 squareCenter = getTileCenter(block.row, block.col);
+        const float centerX = squareCenter.x;
+        const float centerY = squareCenter.y + blockSize * 0.5f;
+        if (scenePos.y >= centerY)
+        {
+            const float ovalRadiusX = 1.5f * blockSize;
+            const float ovalRadiusY = blockSize;
+            const float dx = (scenePos.x - centerX) / ovalRadiusX;
+            const float dy = (scenePos.y - centerY) / ovalRadiusY;
+            if (dx * dx + dy * dy <= 1.0f)
+                return true;
+        }
+        return false;
+    }
+    case BlockType::SOLID:
+        return tileRow == block.row && tileCol == block.col;
+    case BlockType::CANNON:
+        return tileCol == block.col &&
+               (tileRow == block.row || tileRow == block.row - 1 || tileRow == block.row + 1);
+    default:
+        return false;
+    }
+}
+
+void Editor::ResetDragState()
+{
+    draggedBlock = NONE;
+    dragPosition = glm::vec2(0.0f);
+    dragOffset = glm::vec2(0.0f);
+    dragAnchor = 0;
 }

@@ -1,15 +1,14 @@
 #version 330
 
-// Input
-// TODO(student): Get values from vertex shader
+in vec3 frag_color;
+in vec3 frag_normal;
+in vec2 frag_texcoord;
+uniform float elapsed_time_color;
 
-// Output
 layout(location = 0) out vec4 out_color;
-
 
 void main()
 {
-    // TODO(student): Write pixel out color
-    out_color = vec4(1);
-
+    vec3 n = normalize(frag_normal);
+    out_color = vec4(n, 1.0) * sin(elapsed_time_color);
 }

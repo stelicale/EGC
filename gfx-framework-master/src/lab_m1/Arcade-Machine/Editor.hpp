@@ -1,11 +1,11 @@
 ﻿#pragma once
 
 #include "components/simple_scene.h"
-#include "lab_m1/Arcade-Machine/Pong.hpp"
-#include <vector>
 
 namespace m1
 {
+    class Pong;
+
     class Editor : public gfxc::SimpleScene
     {
     public:
@@ -27,7 +27,8 @@ namespace m1
 
     protected:
         // Logical base resolution used for orthographic projection
-        glm::ivec2 baseResolution = glm::ivec2(1280, 720);
+        WindowProperties wp;
+        glm::ivec2 baseResolution = wp.resolution;
 
         float margin = 25.f;
 
@@ -81,7 +82,7 @@ namespace m1
 
         // Colors for different block types
         glm::vec3 solidColor = glm::vec3(0.6f, 0.6f, 0.6f);
-        glm::vec3 cannonDarkColor = glm::vec3(0.1f, 0.1f, 0.1f);
+        glm::vec3 cannonDarkColor = glm::vec3(0.1, 0.1, 0.1);
         glm::vec3 cannonLightColor = glm::vec3(0.8f, 0.8f, 0.8f);
         glm::vec3 bumperColor = glm::vec3(0.6f, 0.0f, 0.6f);
 
@@ -159,7 +160,7 @@ namespace m1
          * @param col [out] Column index if found.
          * @return true if the point lies inside a tile; false otherwise.
          */
-        bool getTileAtPosition(glm::vec2 scenePos, int &row, int &col);
+        bool getTileAtPosition(glm::vec2 scenePos, int &row, int &col) const;
 
         /**
          * @brief Compute the visual center of a grid tile at (row, col).
@@ -168,16 +169,7 @@ namespace m1
          * @param col Tile column index.
          * @return glm::vec2 Center coordinates of the tile in scene space.
          */
-        glm::vec2 getTileCenter(int row, int col);
-
-        /**
-         * @brief Find an already placed block exactly located on tile (row, col).
-         *
-         * @param row Tile row to search.
-         * @param col Tile column to search.
-         * @return Index in `placedBlocks` if found; -1 otherwise.
-         */
-        int findPlacedBlockAt(int row, int col);
+        glm::vec2 getTileCenter(int row, int col) const;
 
         /**
          * @brief Validate the current layout and return whether it satisfies all constraints.
@@ -193,7 +185,7 @@ namespace m1
          */
         bool correctPlacement();
 
-        /** 
+        /**
          * @brief Check if any of the specified cells violate placement restrictions from blocks below.
          *
          * Used to ensure that CANNON and BUMPER blocks do not have conflicting blocks directly beneath them.
@@ -203,23 +195,148 @@ namespace m1
          */
         bool violatesAboveRestrictions(const std::vector<std::pair<int, int>> &cells) const;
 
-    /**
-     * @brief Check if there are no blocks above the specified columns within a restricted row range (for dragged blocks).
-     *
-     * @param topRow The top row of the restricted area.
-     * @param colMin The minimum column index of the restricted area.
-     * @param colMax The maximum column index of the restricted area.
-     * @return true if no blocks are above the restricted columns; false otherwise.
-     */
-    bool noBlocksAboveInRestrictedColumns(int topRow, int colMin, int colMax) const;
+        /**
+         * @brief Check if there are no blocks above the specified columns within a restricted row range (for dragged blocks).
+         *
+         * @param topRow The top row of the restricted area.
+         * @param colMin The minimum column index of the restricted area.
+         * @param colMax The maximum column index of the restricted area.
+         * @return true if no blocks are above the restricted columns; false otherwise.
+         */
+        bool noBlocksAboveInRestrictedColumns(int topRow, int colMin, int colMax) const;
 
-    /**
-     * @brief Write occupancy values for all tiles covered by a block.
-     *
-     * @param block The block whose footprint is applied to the occupancy grid.
-     * @param value Value written to each covered tile (0 clears, 1 marks occupied).
-     */
-    void updateOccupancyForBlock(const PlacedBlock &block, int value);
+        /**
+         * @brief Write occupancy values for all tiles covered by a block.
+         *
+         * Marks the tiles touched by the block footprint with the provided value.
+         *
+         * @param block Placed block whose footprint is processed.
+         * @param value Occupancy value assigned to covered tiles (0 clears, non-zero marks).
+         */
+        void updateOccupancyForBlock(const PlacedBlock &block, int value);
+
+        /**
+         * @brief Update the ready circle color based on current placement validity.
+         */
+        void UpdateReadyCircleColor();
+
+        /**
+         * @brief Render the ready circle UI element.
+         */
+        void RenderReadyCircle();
+
+        /**
+         * @brief Render the remaining status segments on the status bar.
+         */
+        void RenderStatusBar();
+
+        /**
+         * @brief Render the block previews available in the left panel.
+         */
+        void RenderLeftPanelBlocks();
+
+        /**
+         * @brief Render the tile grid outlining the editable area.
+         */
+        void RenderTileGrid();
+
+        /**
+         * @brief Render all blocks placed on the grid.
+         */
+        void RenderPlacedBlocks();
+
+        /**
+         * @brief Render the block currently being dragged by the user.
+         */
+        void RenderDraggedBlock();
+
+        /**
+         * @brief Render meshes corresponding to a specific placed block.
+         *
+         * @param block Block whose visual representation is drawn.
+         */
+        void RenderBlockMeshes(const PlacedBlock &block);
+
+        /**
+         * @brief Render an individual status square by index.
+         *
+         * @param index Zero-based index of the status element to draw.
+         */
+        void RenderStatusSquare(int index);
+
+        /**
+         * @brief Attempt to place the dragged block at a scene position.
+         *
+         * @param scenePos Scene-space drop position.
+         * @return true if the placement was valid (regardless of success state).
+         */
+        bool TryPlaceDraggedBlock(const glm::vec2 &scenePos);
+
+        /**
+         * @brief Try to place a solid block at the specified tile coordinates.
+         *
+         * @param row Target grid row.
+         * @param col Target grid column.
+         * @param outBlock Output block data when placement succeeds.
+         * @return true if placement succeeded.
+         */
+        bool TryPlaceSolid(int row, int col, PlacedBlock &outBlock) const;
+
+        /**
+         * @brief Try to place a cannon block anchored at the specified column.
+         *
+         * Accounts for the anchor position and required support tiles.
+         *
+         * @param dropRow Candidate top row of the drop.
+         * @param col Target grid column.
+         * @param outBlock Output block data when placement succeeds.
+         * @return true if placement succeeded.
+         */
+        bool TryPlaceCannon(int dropRow, int col, PlacedBlock &outBlock) const;
+
+        /**
+         * @brief Try to place a bumper block given a drop origin.
+         *
+         * Computes the occupied tiles based on the drag anchor.
+         *
+         * @param dropOrigin Scene-space drop origin.
+         * @param outBlock Output block data when placement succeeds.
+         * @return true if placement succeeded.
+         */
+        bool TryPlaceBumper(const glm::vec2 &dropOrigin, PlacedBlock &outBlock) const;
+
+        /**
+         * @brief Commit a successfully placed block to the scene state.
+         *
+         * Updates internal registries and occupancy data.
+         *
+         * @param block Block being committed.
+         */
+        void CommitBlockPlacement(const PlacedBlock &block);
+
+        /**
+         * @brief Remove a block located at the provided scene position.
+         *
+         * @param scenePos Scene-space position used for hit testing.
+         * @return true if a block was removed.
+         */
+        bool RemoveBlockAtPosition(const glm::vec2 &scenePos);
+
+        /**
+         * @brief Test if a scene position hits a specific placed block.
+         *
+         * @param block Block to check.
+         * @param scenePos Scene-space test position.
+         * @param tileRow Row index corresponding to scenePos.
+         * @param tileCol Column index corresponding to scenePos.
+         * @return true if the position intersects the block footprint.
+         */
+        bool HitTestBlock(const PlacedBlock &block, const glm::vec2 &scenePos, int tileRow, int tileCol) const;
+
+        /**
+         * @brief Reset drag state after releasing or cancelling a drag operation.
+         */
+        void ResetDragState();
 
         // Expose ship data to Pong
     public:

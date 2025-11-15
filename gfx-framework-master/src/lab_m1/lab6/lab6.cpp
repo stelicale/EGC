@@ -37,13 +37,13 @@ void Lab6::Init()
         vector<VertexFormat> vertices
         {
             VertexFormat(glm::vec3(-1, -1,  1), glm::vec3(0, 1, 1), glm::vec3(0.2, 0.8, 0.2)),
-            VertexFormat(glm::vec3( 1, -1,  1), glm::vec3(1, 0, 1), glm::vec3(0.9, 0.4, 0.2)),
+            VertexFormat(glm::vec3(1, -1,  1), glm::vec3(1, 0, 1), glm::vec3(0.9, 0.4, 0.2)),
             VertexFormat(glm::vec3(-1,  1,  1), glm::vec3(1, 0, 0), glm::vec3(0.7, 0.7, 0.1)),
-            VertexFormat(glm::vec3( 1,  1,  1), glm::vec3(0, 1, 0), glm::vec3(0.7, 0.3, 0.7)),
+            VertexFormat(glm::vec3(1,  1,  1), glm::vec3(0, 1, 0), glm::vec3(0.7, 0.3, 0.7)),
             VertexFormat(glm::vec3(-1, -1, -1), glm::vec3(1, 1, 1), glm::vec3(0.3, 0.5, 0.4)),
-            VertexFormat(glm::vec3( 1, -1, -1), glm::vec3(0, 1, 1), glm::vec3(0.5, 0.2, 0.9)),
+            VertexFormat(glm::vec3(1, -1, -1), glm::vec3(0, 1, 1), glm::vec3(0.5, 0.2, 0.9)),
             VertexFormat(glm::vec3(-1,  1, -1), glm::vec3(1, 1, 0), glm::vec3(0.7, 0.0, 0.7)),
-            VertexFormat(glm::vec3( 1,  1, -1), glm::vec3(0, 0, 1), glm::vec3(0.1, 0.5, 0.8)),
+            VertexFormat(glm::vec3(1,  1, -1), glm::vec3(0, 0, 1), glm::vec3(0.1, 0.5, 0.8)),
         };
 
         vector<unsigned int> indices =
@@ -61,7 +61,7 @@ void Lab6::Init()
 
     // Create a shader program for drawing face polygon with the color of the normal
     {
-        Shader *shader = new Shader("LabShader");
+        Shader* shader = new Shader("LabShader");
         shader->AddShader(PATH_JOIN(window->props.selfDir, SOURCE_PATH::M1, "lab6", "shaders", "VertexShader.glsl"), GL_VERTEX_SHADER);
         shader->AddShader(PATH_JOIN(window->props.selfDir, SOURCE_PATH::M1, "lab6", "shaders", "FragmentShader.glsl"), GL_FRAGMENT_SHADER);
         shader->CreateAndLink();
@@ -70,7 +70,7 @@ void Lab6::Init()
 }
 
 
-Mesh* Lab6::CreateMesh(const char *name, const std::vector<VertexFormat> &vertices, const std::vector<unsigned int> &indices)
+Mesh* Lab6::CreateMesh(const char* name, const std::vector<VertexFormat>& vertices, const std::vector<unsigned int>& indices)
 {
     unsigned int VAO = 0;
     // Create the VAO and bind it
@@ -96,18 +96,6 @@ Mesh* Lab6::CreateMesh(const char *name, const std::vector<VertexFormat> &vertic
     // ========================================================================
     // This section demonstrates how the GPU vertex shader program
     // receives data.
-
-    // TODO(student): If you look closely in the `Init()` and `Update()`
-    // functions, you will see that we have three objects which we load
-    // and use in three different ways:
-    // - LoadMesh   + LabShader (this lab's shader)
-    // - CreateMesh + VertexNormal (this shader is already implemented)
-    // - CreateMesh + LabShader (this lab's shader)
-    // To get an idea about how they're different from one another, do the
-    // following experiments. What happens if you switch the color pipe and
-    // normal pipe in this function (but not in the shader)? Now, what happens
-    // if you do the same thing in the shader (but not in this function)?
-    // Finally, what happens if you do the same thing in both places? Why?
 
     // Set vertex position attribute
     glEnableVertexAttribArray(0);
@@ -186,7 +174,7 @@ void Lab6::FrameEnd()
 }
 
 
-void Lab6::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelMatrix)
+void Lab6::RenderSimpleMesh(Mesh* mesh, Shader* shader, const glm::mat4& modelMatrix)
 {
     if (!mesh || !shader || !shader->GetProgramID())
         return;
@@ -194,19 +182,31 @@ void Lab6::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelM
     // Render an object using the specified shader and the specified position
     glUseProgram(shader->program);
 
-    // TODO(student): Get shader location for uniform mat4 "Model"
 
+    int elapsed_time_color = glGetUniformLocation(shader->program, "elapsed_time_color");
+    glUniform1f(elapsed_time_color, Engine::GetElapsedTime());
+
+    int elapsed_time_pos = glGetUniformLocation(shader->program, "elapsed_time_pos");
+    glUniform1f(elapsed_time_pos, Engine::GetElapsedTime());
+
+    // Compute View and Projection matrices
+    glm::mat4 viewMatrix = GetSceneCamera()->GetViewMatrix();
+    glm::mat4 projectionMatrix = GetSceneCamera()->GetProjectionMatrix();
+
+    // TODO(student): Get shader location for uniform mat4 "Model"
+    GLint loc_model = glGetUniformLocation(shader->program, "Model");
     // TODO(student): Set shader uniform "Model" to modelMatrix
+    glUniformMatrix4fv(loc_model, 1, GL_FALSE, glm::value_ptr(modelMatrix));
 
     // TODO(student): Get shader location for uniform mat4 "View"
-
+    GLint loc_view = glGetUniformLocation(shader->program, "View");
     // TODO(student): Set shader uniform "View" to viewMatrix
-    glm::mat4 viewMatrix = GetSceneCamera()->GetViewMatrix();
+    glUniformMatrix4fv(loc_view, 1, GL_FALSE, glm::value_ptr(viewMatrix));
 
     // TODO(student): Get shader location for uniform mat4 "Projection"
-
+    GLint loc_proj = glGetUniformLocation(shader->program, "Projection");
     // TODO(student): Set shader uniform "Projection" to projectionMatrix
-    glm::mat4 projectionMatrix = GetSceneCamera()->GetProjectionMatrix();
+    glUniformMatrix4fv(loc_proj, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
 
     // Draw the object
     glBindVertexArray(mesh->GetBuffers()->m_VAO);
