@@ -67,3 +67,11 @@
 - **Speed Boost:** Increase ball speed on every bumper collision (bumper approximated as a rectangle).
 - **Paddle Animation:** Trigger a brief scale animation (~1 second) on paddle-ball impact.
 - **Cannon Launch:** Replace basic reset by spawning new balls from every cannon at round start; the round ends once all balls reach a goal.
+
+## Run
+
+In `main.cpp`
+```
+// Set this
+World *world = new m1::Editor();
+```

@@ -22,7 +22,9 @@ namespace m1
         void Update(float deltaTimeSeconds) override;
         void FrameEnd() override;
 
-        void RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 &modelMatrix, Texture2D *texture1 = NULL, Texture2D *texture2 = NULL);
+        void RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 &modelMatrix,
+                              Texture2D *texture1 = NULL, Texture2D *texture2 = NULL,
+                              bool useTimeScroll = false, float mixFactor = 0.0f);
         Texture2D *CreateRandomTexture(unsigned int width, unsigned int height);
 
         void OnInputUpdate(float deltaTime, int mods) override;

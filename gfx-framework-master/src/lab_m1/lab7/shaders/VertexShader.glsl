@@ -25,31 +25,44 @@ out vec3 color;
 
 void main()
 {
-    // TODO(student): Compute world space vectors
+    // Transform position and normal to world space
+    vec3 world_pos = vec3(Model * vec4(v_position, 1.0));
+    vec3 N = normalize(mat3(Model) * v_normal);
+    vec3 L = normalize(light_position - world_pos);
+    vec3 V = normalize(eye_position - world_pos);
+    vec3 H = normalize(L + V); // Blinn-Phong
 
-    // TODO(student): Define ambient light component
+    // Ambient component
     float ambient_light = 0.25;
+    vec3 ambient = ambient_light * object_color;
 
-    // TODO(student): Compute diffuse light component
-    float diffuse_light = 0;
+    // Diffuse component
+    float diffuse_light = max(dot(N, L), 0.0);
+    vec3 diffuse = material_kd * diffuse_light * object_color;
 
-    // TODO(student): Compute specular light component
-    float specular_light = 0;
-
-    // It's important to distinguish between "reflection model" and
-    // "shading method". In this shader, we are experimenting with the Phong
-    // (1975) and Blinn-Phong (1977) reflection models, and we are using the
-    // Gouraud (1971) shading method. There is also the Phong (1975) shading
-    // method, which we'll use in the future. Don't mix them up!
-    if (diffuse_light > 0)
-    {
-
+    // Specular component (Phong)
+    float specular_light = 0.0;
+    if (diffuse_light > 0.0) {
+        // Phong
+        vec3 R = reflect(-L, N);
+        specular_light = pow(max(dot(R, V), 0.0), material_shininess);
     }
+    vec3 specular = material_ks * specular_light * vec3(1.0);
 
-    // TODO(student): Compute light
+    // Blinn-Phong variant (optional, can be added to specular)
+    float blinn_specular = 0.0;
+    if (diffuse_light > 0.0) {
+        blinn_specular = pow(max(dot(N, H), 0.0), material_shininess);
+    }
+    // You can blend Phong and Blinn-Phong if desired:
+    // specular += material_ks * blinn_specular * vec3(1.0);
 
-    // TODO(student): Send color light output to fragment shader
-    color = vec3(1);
+    // Attenuation factor
+    float distance = length(light_position - world_pos);
+    float attenuation = 1.0 / (1.0 + 0.09 * distance + 0.032 * distance * distance);
+
+    // Final color
+    color = (ambient + diffuse + specular) * attenuation;
 
     gl_Position = Projection * View * Model * vec4(v_position, 1.0);
 }

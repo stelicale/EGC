@@ -36,6 +36,17 @@ namespace m1
         float materialKd;
         float materialKs;
 
+        // Spotlight control
+        bool spotlightOn = false;
+        float spotCutoffDeg = 30.0f; // degrees
+        float spotExponent = 10.0f;
+        float spotYaw = 0.0f;   // radians
+        float spotPitch = -glm::radians(45.0f); // radians
+
+        // secondary light (additional source)
+        glm::vec3 light2Position = glm::vec3(-2.0f, 2.0f, 1.0f);
+        glm::vec3 light2Color = glm::vec3(0.6f, 0.6f, 0.9f);
+
         // TODO(student): If you need any other class variables, define them here.
 
     };

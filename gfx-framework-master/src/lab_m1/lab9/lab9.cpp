@@ -3,6 +3,10 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <cstdlib>
+#include <cmath>
+
+#include "core/engine.h"
 
 using namespace std;
 using namespace m1;
@@ -96,9 +100,10 @@ void Lab9::Init()
 
         vector<glm::vec2> textureCoords
         {
-            // TODO(student): Complete texture coordinates for the square
-            glm::vec2(0.0f, 0.0f)
-
+            glm::vec2(0.0f, 0.0f),
+            glm::vec2(0.0f, 1.0f),
+            glm::vec2(1.0f, 1.0f),
+            glm::vec2(1.0f, 0.0f)
         };
 
         vector<unsigned int> indices =
@@ -137,20 +142,12 @@ void Lab9::FrameStart()
 
 void Lab9::Update(float deltaTimeSeconds)
 {
-    // TODO(student): Choose an object and add a second texture to it.
-    // For example, for the sphere, you can have the "earth" texture
-    // and the "random" texture, and you will use the `mix` function
-    // in the fragment shader to mix these two textures.
-    //
-    // However, you may have the unpleasant surprise that the "random"
-    // texture now appears onto all objects in the scene, even though
-    // you are only passing the second texture for a single object!
-    // Why does this happen? How can you solve it?
+    // Animated globe with scrolling texture coordinates
     {
         glm::mat4 modelMatrix = glm::mat4(1);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(1, 1, -3));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(2));
-        RenderSimpleMesh(meshes["sphere"], shaders["LabShader"], modelMatrix, mapTextures["earth"]);
+        RenderSimpleMesh(meshes["sphere"], shaders["LabShader"], modelMatrix, mapTextures["earth"], nullptr, true);
     }
 
     {
@@ -169,11 +166,21 @@ void Lab9::Update(float deltaTimeSeconds)
         RenderSimpleMesh(meshes["box"], shaders["LabShader"], modelMatrix, mapTextures["random"]);
     }
 
+    // Billboarded quad mixing two textures
     {
+        glm::vec3 quadPos(0.0f, 0.5f, 0.0f);
+        glm::vec3 camPos = GetSceneCamera()->m_transform->GetWorldPosition();
+        glm::vec3 dir = camPos - quadPos;
+        dir.y = 0.0f;
+        if (glm::length(dir) < 1e-4f) dir = glm::vec3(0, 0, 1);
+        dir = glm::normalize(dir);
+        float angle = atan2(dir.x, dir.z);
+
         glm::mat4 modelMatrix = glm::mat4(1);
-        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.5f, 0.0f));
+        modelMatrix = glm::translate(modelMatrix, quadPos);
+        modelMatrix = glm::rotate(modelMatrix, angle, glm::vec3(0, 1, 0));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.5f));
-        RenderSimpleMesh(meshes["square"], shaders["LabShader"], modelMatrix, mapTextures["grass"]);
+        RenderSimpleMesh(meshes["square"], shaders["LabShader"], modelMatrix, mapTextures["grass"], mapTextures["crate"], false, 0.5f);
     }
 
     {
@@ -191,12 +198,11 @@ void Lab9::FrameEnd()
 }
 
 
-void Lab9::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelMatrix, Texture2D* texture1, Texture2D* texture2)
+void Lab9::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelMatrix, Texture2D* texture1, Texture2D* texture2, bool useTimeScroll, float mixFactor)
 {
     if (!mesh || !shader || !shader->GetProgramID())
         return;
 
-    // Render an object using the specified shader and the specified position
     glUseProgram(shader->program);
 
     // Bind model matrix
@@ -213,29 +219,46 @@ void Lab9::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelM
     int loc_projection_matrix = glGetUniformLocation(shader->program, "Projection");
     glUniformMatrix4fv(loc_projection_matrix, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
 
-    // TODO(student): Set any other shader uniforms that you need
-
+    int loc_use_tex1 = glGetUniformLocation(shader->program, "use_texture_1");
+    glUniform1i(loc_use_tex1, texture1 ? 1 : 0);
     if (texture1)
     {
-        // TODO(student): Do these:
-        // - activate texture location 0
-        // - bind the texture1 ID
-        // - send theuniform value
-
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture1->GetTextureID());
+        glUniform1i(glGetUniformLocation(shader->program, "texture_1"), 0);
     }
 
+    int loc_use_tex2 = glGetUniformLocation(shader->program, "use_texture_2");
+    glUniform1i(loc_use_tex2, texture2 ? 1 : 0);
     if (texture2)
     {
-        // TODO(student): Do these:
-        // - activate texture location 1
-        // - bind the texture2 ID
-        // - send the uniform value
-
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, texture2->GetTextureID());
+        glUniform1i(glGetUniformLocation(shader->program, "texture_2"), 1);
     }
+
+    glUniform1f(glGetUniformLocation(shader->program, "mix_factor"), mixFactor);
+
+    float currentTime = (float)Engine::GetElapsedTime();
+    glUniform1i(glGetUniformLocation(shader->program, "use_time_scroll"), useTimeScroll ? 1 : 0);
+    glUniform1f(glGetUniformLocation(shader->program, "time_value"), useTimeScroll ? currentTime : 0.0f);
+    glUniform1f(glGetUniformLocation(shader->program, "scroll_speed"), 0.15f);
 
     // Draw the object
     glBindVertexArray(mesh->GetBuffers()->m_VAO);
     glDrawElements(mesh->GetDrawMode(), static_cast<int>(mesh->indices.size()), GL_UNSIGNED_INT, 0);
+
+    if (texture2)
+    {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (texture1)
+    {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
 }
 
 
@@ -246,26 +269,33 @@ Texture2D* Lab9::CreateRandomTexture(unsigned int width, unsigned int height)
     unsigned int size = width * height * channels;
     unsigned char* data = new unsigned char[size];
 
-    // TODO(student): Generate random texture data
+    for (unsigned int i = 0; i < size; ++i)
+    {
+        data[i] = static_cast<unsigned char>(rand() % 256);
+    }
 
-    // TODO(student): Generate and bind the new texture ID
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
 
     if (GLEW_EXT_texture_filter_anisotropic) {
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 4);
     }
-    // TODO(student): Set the texture parameters (MIN_FILTER, MAG_FILTER and WRAPPING MODE) using glTexParameteri
 
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     CheckOpenGLError();
 
-    // Use glTexImage2D to set the texture data
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-
-    // TODO(student): Generate texture mip-maps
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     CheckOpenGLError();
 
-    // Save the texture into a wrapper Texture2D class for using easier later during rendering phase
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     Texture2D* texture = new Texture2D();
     texture->Init(textureID, width, height, channels);
 

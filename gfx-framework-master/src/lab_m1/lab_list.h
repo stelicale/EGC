@@ -11,3 +11,4 @@
 #include "lab_m1/lab8/lab8.h"
 #include "lab_m1/lab9/lab9.h"
 #include "lab_m1/Arcade-Machine/Editor.hpp"
+#include "lab_m1/Train-Geeks/Tema2.hpp"

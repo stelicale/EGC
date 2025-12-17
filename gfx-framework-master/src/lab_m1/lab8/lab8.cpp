@@ -60,6 +60,15 @@ void Lab8::Init()
         materialShininess = 30;
         materialKd = 0.5;
         materialKs = 0.5;
+
+        spotlightOn = false;
+        spotCutoffDeg = 30.0f;
+        spotExponent = 10.0f;
+        spotYaw = 0.0f;
+        spotPitch = -glm::radians(45.0f);
+        // Secondary (green) light
+        light2Position = glm::vec3(-2.0f, 2.0f, 1.0f);
+        light2Color = glm::vec3(0.0f, 1.0f, 0.0f); // green
     }
 }
 
@@ -120,6 +129,14 @@ void Lab8::Update(float deltaTimeSeconds)
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.1f));
         RenderMesh(meshes["sphere"], shaders["Simple"], modelMatrix);
     }
+
+    // Render the secondary green light in the scene
+    {
+        glm::mat4 m2 = glm::mat4(1);
+        m2 = glm::translate(m2, light2Position);
+        m2 = glm::scale(m2, glm::vec3(0.08f));
+        RenderMesh(meshes["sphere"], shaders["Simple"], m2);
+    }
 }
 
 
@@ -162,7 +179,23 @@ void Lab8::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelM
     int object_color = glGetUniformLocation(shader->program, "object_color");
     glUniform3f(object_color, color.r, color.g, color.b);
 
-    // TODO(student): Set any other shader uniforms that you need
+    // Spotlight uniforms
+    int spot_on = glGetUniformLocation(shader->program, "spotlight_on");
+    glUniform1i(spot_on, spotlightOn ? 1 : 0);
+    int spot_dir_loc = glGetUniformLocation(shader->program, "spot_direction");
+    // compute direction from yaw/pitch
+    glm::vec3 spotDir = glm::vec3(cos(spotPitch) * cos(spotYaw), sin(spotPitch), cos(spotPitch) * sin(spotYaw));
+    glUniform3f(spot_dir_loc, spotDir.x, spotDir.y, spotDir.z);
+    int spot_cutoff_loc = glGetUniformLocation(shader->program, "spot_cutoff_cos");
+    glUniform1f(spot_cutoff_loc, cos(glm::radians(spotCutoffDeg)));
+    int spot_exp_loc = glGetUniformLocation(shader->program, "spot_exponent");
+    glUniform1f(spot_exp_loc, spotExponent);
+
+    // secondary light
+    int light2_pos_loc = glGetUniformLocation(shader->program, "light2_position");
+    glUniform3f(light2_pos_loc, light2Position.x, light2Position.y, light2Position.z);
+    int light2_col_loc = glGetUniformLocation(shader->program, "light2_color");
+    glUniform3f(light2_col_loc, light2Color.r, light2Color.g, light2Color.b);
 
     // Bind model matrix
     GLint loc_model_matrix = glGetUniformLocation(shader->program, "Model");
@@ -209,6 +242,15 @@ void Lab8::OnInputUpdate(float deltaTime, int mods)
         if (window->KeyHold(GLFW_KEY_E)) lightPosition += up * deltaTime * speed;
         if (window->KeyHold(GLFW_KEY_Q)) lightPosition -= up * deltaTime * speed;
 
+        // Spotlight control: rotate and adjust cutoff
+        float rotSpeed = glm::radians(45.0f); // radians per second
+        if (window->KeyHold(GLFW_KEY_UP)) spotPitch += rotSpeed * deltaTime;
+        if (window->KeyHold(GLFW_KEY_DOWN)) spotPitch -= rotSpeed * deltaTime;
+        if (window->KeyHold(GLFW_KEY_LEFT)) spotYaw -= rotSpeed * deltaTime;
+        if (window->KeyHold(GLFW_KEY_RIGHT)) spotYaw += rotSpeed * deltaTime;
+        if (window->KeyHold(GLFW_KEY_Z)) spotCutoffDeg = glm::clamp(spotCutoffDeg + 20.0f * deltaTime, 5.0f, 90.0f);
+        if (window->KeyHold(GLFW_KEY_X)) spotCutoffDeg = glm::clamp(spotCutoffDeg - 20.0f * deltaTime, 5.0f, 90.0f);
+
         // TODO(student): Set any other keys that you might need
 
     }
@@ -217,10 +259,10 @@ void Lab8::OnInputUpdate(float deltaTime, int mods)
 
 void Lab8::OnKeyPress(int key, int mods)
 {
-    // Add key press event
-
-    // TODO(student): Set keys that you might need
-
+    // Toggle spotlight mode with F
+    if (key == GLFW_KEY_F) {
+        spotlightOn = !spotlightOn;
+    }
 }
 
 

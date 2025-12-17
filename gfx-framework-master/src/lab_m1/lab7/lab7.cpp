@@ -7,39 +7,35 @@
 using namespace std;
 using namespace m1;
 
-
 /*
  *  To find out more about `FrameStart`, `Update`, `FrameEnd`
  *  and the order in which they are called, see `world.cpp`.
  */
 
-
 Lab7::Lab7()
 {
 }
-
 
 Lab7::~Lab7()
 {
 }
 
-
 void Lab7::Init()
 {
     {
-        Mesh* mesh = new Mesh("box");
+        Mesh *mesh = new Mesh("box");
         mesh->LoadMesh(PATH_JOIN(window->props.selfDir, RESOURCE_PATH::MODELS, "primitives"), "box.obj");
         meshes[mesh->GetMeshID()] = mesh;
     }
 
     {
-        Mesh* mesh = new Mesh("sphere");
+        Mesh *mesh = new Mesh("sphere");
         mesh->LoadMesh(PATH_JOIN(window->props.selfDir, RESOURCE_PATH::MODELS, "primitives"), "sphere.obj");
         meshes[mesh->GetMeshID()] = mesh;
     }
 
     {
-        Mesh* mesh = new Mesh("plane");
+        Mesh *mesh = new Mesh("plane");
         mesh->LoadMesh(PATH_JOIN(window->props.selfDir, RESOURCE_PATH::MODELS, "primitives"), "plane50.obj");
         meshes[mesh->GetMeshID()] = mesh;
     }
@@ -62,7 +58,6 @@ void Lab7::Init()
     }
 }
 
-
 void Lab7::FrameStart()
 {
     // Clears the color buffer (using the previously set color) and depth buffer
@@ -74,13 +69,13 @@ void Lab7::FrameStart()
     glViewport(0, 0, resolution.x, resolution.y);
 }
 
-
 void Lab7::Update(float deltaTimeSeconds)
 {
     {
         glm::mat4 modelMatrix = glm::mat4(1);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(0, 1, 0));
-        RenderSimpleMesh(meshes["sphere"], shaders["LabShader"], modelMatrix);
+        // Sfera - albastru
+        RenderSimpleMesh(meshes["sphere"], shaders["LabShader"], modelMatrix, glm::vec3(0.0f, 0.2f, 1.0f));
     }
 
     {
@@ -103,7 +98,8 @@ void Lab7::Update(float deltaTimeSeconds)
         glm::mat4 modelMatrix = glm::mat4(1);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(0, 0.01f, 0));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.25f));
-        RenderSimpleMesh(meshes["plane"], shaders["LabShader"], modelMatrix);
+        // Planul - gri
+        RenderSimpleMesh(meshes["plane"], shaders["LabShader"], modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f));
     }
 
     // Render the point light in the scene
@@ -115,14 +111,12 @@ void Lab7::Update(float deltaTimeSeconds)
     }
 }
 
-
 void Lab7::FrameEnd()
 {
     DrawCoordinateSystem();
 }
 
-
-void Lab7::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelMatrix, const glm::vec3 &color)
+void Lab7::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 &modelMatrix, const glm::vec3 &color)
 {
     if (!mesh || !shader || !shader->GetProgramID())
         return;
@@ -131,12 +125,24 @@ void Lab7::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelM
     glUseProgram(shader->program);
 
     // Set shader uniforms for light & material properties
-    // TODO(student): Set light position uniform
+    GLint loc_light_position = glGetUniformLocation(shader->program, "light_position");
+    glUniform3fv(loc_light_position, 1, glm::value_ptr(lightPosition));
 
     glm::vec3 eyePosition = GetSceneCamera()->m_transform->GetWorldPosition();
-    // TODO(student): Set eye position (camera position) uniform
+    GLint loc_eye_position = glGetUniformLocation(shader->program, "eye_position");
+    glUniform3fv(loc_eye_position, 1, glm::value_ptr(eyePosition));
 
-    // TODO(student): Set material property uniforms (shininess, kd, ks, object color)
+    GLint loc_material_kd = glGetUniformLocation(shader->program, "material_kd");
+    glUniform1f(loc_material_kd, materialKd);
+
+    GLint loc_material_ks = glGetUniformLocation(shader->program, "material_ks");
+    glUniform1f(loc_material_ks, materialKs);
+
+    GLint loc_material_shininess = glGetUniformLocation(shader->program, "material_shininess");
+    glUniform1i(loc_material_shininess, materialShininess);
+
+    GLint loc_object_color = glGetUniformLocation(shader->program, "object_color");
+    glUniform3fv(loc_object_color, 1, glm::value_ptr(color));
 
     // Bind model matrix
     GLint loc_model_matrix = glGetUniformLocation(shader->program, "Model");
@@ -157,12 +163,10 @@ void Lab7::RenderSimpleMesh(Mesh *mesh, Shader *shader, const glm::mat4 & modelM
     glDrawElements(mesh->GetDrawMode(), static_cast<int>(mesh->indices.size()), GL_UNSIGNED_INT, 0);
 }
 
-
 /*
  *  These are callback functions. To find more about callbacks and
  *  how they behave, see `input_controller.h`.
  */
-
 
 void Lab7::OnInputUpdate(float deltaTime, int mods)
 {
@@ -176,50 +180,49 @@ void Lab7::OnInputUpdate(float deltaTime, int mods)
         forward = glm::normalize(glm::vec3(forward.x, 0, forward.z));
 
         // Control light position using on W, A, S, D, E, Q
-        if (window->KeyHold(GLFW_KEY_W)) lightPosition -= forward * deltaTime * speed;
-        if (window->KeyHold(GLFW_KEY_A)) lightPosition -= right * deltaTime * speed;
-        if (window->KeyHold(GLFW_KEY_S)) lightPosition += forward * deltaTime * speed;
-        if (window->KeyHold(GLFW_KEY_D)) lightPosition += right * deltaTime * speed;
-        if (window->KeyHold(GLFW_KEY_E)) lightPosition += up * deltaTime * speed;
-        if (window->KeyHold(GLFW_KEY_Q)) lightPosition -= up * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_W))
+            lightPosition -= forward * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_A))
+            lightPosition -= right * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_S))
+            lightPosition += forward * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_D))
+            lightPosition += right * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_E))
+            lightPosition += up * deltaTime * speed;
+        if (window->KeyHold(GLFW_KEY_Q))
+            lightPosition -= up * deltaTime * speed;
     }
 }
-
 
 void Lab7::OnKeyPress(int key, int mods)
 {
     // Add key press event
 }
 
-
 void Lab7::OnKeyRelease(int key, int mods)
 {
     // Add key release event
 }
-
 
 void Lab7::OnMouseMove(int mouseX, int mouseY, int deltaX, int deltaY)
 {
     // Add mouse move event
 }
 
-
 void Lab7::OnMouseBtnPress(int mouseX, int mouseY, int button, int mods)
 {
     // Add mouse button press event
 }
-
 
 void Lab7::OnMouseBtnRelease(int mouseX, int mouseY, int button, int mods)
 {
     // Add mouse button release event
 }
 
-
 void Lab7::OnMouseScroll(int mouseX, int mouseY, int offsetX, int offsetY)
 {
 }
-
 
 void Lab7::OnWindowResize(int width, int height)
 {
