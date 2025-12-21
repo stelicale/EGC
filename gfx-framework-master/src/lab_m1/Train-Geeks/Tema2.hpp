@@ -94,6 +94,25 @@ namespace m1
             bool waitingAtIntersection = false;
         } train;
 
+        // Symbols above main station (fade to red)
+        // --- MODIFICARE: Mecanica de Livrare (Delivery) ---
+        float maxDeliveryTime = 30.0f;               // Timpul maxim pentru a ajunge la gara
+        float deliveryTimer = 0.0f;                  // Cronometru activ
+        bool isDelivering = false;                   // False = colectam, True = ducem la gara
+        
+        std::vector<int> symbolTypes;                // 0 = cube, 1 = pyramid, 2 = sphere
+        std::vector<glm::vec3> symbolOriginalColors; // original colors
+        bool symbolsInitialized = false;             // flag to generate random types once
+
+        // Symbol collection mechanics
+        static constexpr float kStationRadius = 4.0f;  // detection radius for stations (stations are offset from rails)
+        static constexpr float kSymbolWaitTime = 0.5f; // seconds to wait per symbol
+        int symbolsCollected = 0;                      // number of symbols collected
+        bool collectingSymbol = false;                 // train is stopped collecting symbols
+        float collectTimer = 0.0f;                     // timer for current symbol collection
+        int symbolsToCollect = 0;                      // remaining consecutive symbols at this stop
+        int currentSymbolCount = 5;                    // number of symbols in current order (increases on success)
+
         /**
          * @brief Get the Rail Type object
          * @param pos Current position of the train

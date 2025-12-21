@@ -6,6 +6,139 @@
 #include "core/engine.h"
 #include "utils/gl_utils.h"
 
+// 2D
+
+// 1. Funcție pentru generarea unui CERC (Turcuaz - pentru stații)
+Mesh* object3D::CreateCircle(const std::string& name, glm::vec3 color)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    // Centrul cercului
+    vertices.emplace_back(glm::vec3(0, 0, 0), color);
+    
+    // Generăm puncte pe circumferință
+    int numSegments = 32;
+    float radius = 1.0f;
+
+    for (int i = 0; i <= numSegments; i++) {
+        float theta = 2.0f * 3.14159f * float(i) / float(numSegments);
+        float x = radius * cosf(theta);
+        float y = radius * sinf(theta); // Construim în planul XY
+
+        vertices.emplace_back(glm::vec3(x, y, 0), color);
+        
+        // Creăm indicii pentru GL_TRIANGLE_FAN
+        if (i < numSegments) {
+            indices.push_back(0);        // Centru
+            indices.push_back(i + 1);    // Punct curent
+            indices.push_back(i + 2);    // Punct următor
+        }
+    }
+
+    Mesh* circle = new Mesh(name);
+    circle->InitFromData(vertices, indices);
+    return circle;
+}
+
+// 2. Funcție pentru generarea unui TRIUNGHI (Verde - pentru pickup)
+Mesh* object3D::CreateTriangle(const std::string& name, glm::vec3 color)
+{
+    std::vector<VertexFormat> vertices =
+    {
+        VertexFormat(glm::vec3(0, 0.5f, 0), color),      // Vârf sus
+        VertexFormat(glm::vec3(-0.5f, -0.5f, 0), color), // Stânga jos
+        VertexFormat(glm::vec3(0.5f, -0.5f, 0), color)   // Dreapta jos
+    };
+
+    std::vector<unsigned int> indices = { 0, 1, 2 };
+
+    Mesh* triangle = new Mesh(name);
+    triangle->InitFromData(vertices, indices);
+    return triangle;
+}
+
+// 3. Funcție pentru generarea unei SĂGEȚI (Albă - pentru player/cameră)
+Mesh* object3D::CreateArrow(const std::string& name, glm::vec3 color)
+{
+    std::vector<VertexFormat> vertices =
+    {
+        // Vârful săgeții
+        VertexFormat(glm::vec3(0, 0.5f, 0), color),      
+        VertexFormat(glm::vec3(-0.3f, 0.0f, 0), color),  
+        VertexFormat(glm::vec3(0.3f, 0.0f, 0), color),   
+        
+        // Coada săgeții
+        VertexFormat(glm::vec3(-0.1f, 0.0f, 0), color),  
+        VertexFormat(glm::vec3(0.1f, 0.0f, 0), color),
+        VertexFormat(glm::vec3(-0.1f, -0.5f, 0), color),
+        VertexFormat(glm::vec3(0.1f, -0.5f, 0), color)
+    };
+
+    std::vector<unsigned int> indices = 
+    { 
+        0, 1, 2,        // Triunghi vârf
+        3, 4, 6, 3, 6, 5 // Dreptunghi coadă
+    };
+
+    Mesh* arrow = new Mesh(name);
+    arrow->InitFromData(vertices, indices);
+    return arrow;
+}
+
+Mesh* object3D::CreateStar(const std::string& name, glm::vec3 color)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    vertices.emplace_back(glm::vec3(0, 0, 0), color); // Centru
+
+    float rOuter = 1.0f;
+    float rInner = 0.4f;
+    int numPoints = 5;
+
+    for (int i = 0; i <= numPoints * 2; i++) {
+        // Alternăm razele (extern, intern, extern...)
+        float radius = (i % 2 == 0) ? rOuter : rInner;
+        // Unghiul curent: 360 grade / (2 * 5 puncte) = 36 grade per pas
+        float currAngle = (i * 3.14159f) / numPoints; // PI / 5
+        
+        // Rotim cu PI/2 (90 grade) ca steaua să stea "dreaptă" (cu vârful în sus)
+        float x = radius * cosf(currAngle + 1.5708f); 
+        float y = radius * sinf(currAngle + 1.5708f);
+        
+        vertices.emplace_back(glm::vec3(x, y, 0), color);
+
+        if (i < numPoints * 2) {
+            indices.push_back(0);
+            indices.push_back(i + 1);
+            indices.push_back(i + 2);
+        }
+    }
+
+    Mesh* star = new Mesh(name);
+    star->InitFromData(vertices, indices);
+    return star;
+}
+
+// 4. Funcție pentru generarea unui PĂTRAT (folosit pentru obstacole/tren)
+Mesh *object3D::CreateSquare(const std::string& name, glm::vec3 color)
+{
+    std::vector<VertexFormat> vertices =
+    {
+        VertexFormat(glm::vec3(-0.5f, -0.5f, 0), color),
+        VertexFormat(glm::vec3(0.5f, -0.5f, 0), color),
+        VertexFormat(glm::vec3(0.5f, 0.5f, 0), color),
+        VertexFormat(glm::vec3(-0.5f, 0.5f, 0), color)
+    };
+
+    std::vector<unsigned int> indices = { 0, 1, 2, 0, 2, 3 };
+
+    Mesh* square = new Mesh(name);
+    square->InitFromData(vertices, indices);
+    return square;
+}
+
 // Helper intern pentru a adauga un cub (paralelipiped) in listele de varfuri si indici
 // Aceasta functie reduce duplicarea codului
 void AddBox(std::vector<VertexFormat> &vertices, std::vector<unsigned int> &indices,
@@ -1048,15 +1181,15 @@ Mesh *object3D::CreateBasicTrainStation(
     // Acoperisul se termina la y=2.5. Punem simbolul sa inceapa de la y=3.05
     if (symbolShape == "cube")
     {
-        AddBox(vertices, indices, glm::vec3(-0.25f, 2.8f, -0.25f), glm::vec3(0.25f, 3.3f, 0.25f), symbolColor, true);
+        AddBox(vertices, indices, glm::vec3(-0.5f, 3.0f, -0.5f), glm::vec3(0.5f, 4.0f, 0.5f), symbolColor, true);
     }
     else if (symbolShape == "pyramid")
     {
-        AddPyramid(vertices, indices, glm::vec3(0.0f, 2.8f, 0.0f), 0.5f, 0.5f, symbolColor, true);
+        AddPyramid(vertices, indices, glm::vec3(0.0f, 2.8f, 0.0f), 1.0f, 1.0f, symbolColor, true);
     }
     else if (symbolShape == "sphere")
     {
-        AddSphere(vertices, indices, glm::vec3(0.0f, 3.05f, 0.0f), 0.25f, symbolColor, 16, 16, true);
+        AddSphere(vertices, indices, glm::vec3(0.0f, 3.05f, 0.0f), 0.5f, symbolColor, 16, 16, true);
     }
 
     Mesh *station = new Mesh(name);
@@ -1207,20 +1340,76 @@ Mesh *object3D::CreateTunnelRail(
 
     // Dunga Stânga sus
     AddBox(vertices, indices,
-           glm::vec3(-length / 2, tunnelHeight + 0.01f, -tunnelWidth + 0.15f),
-           glm::vec3(length / 2, tunnelHeight + 0.01f + stripeThickness, -tunnelWidth + 0.15f + stripeWidth),
+           glm::vec3(-length / 2, tunnelHeight + 0.01f, -tunnelWidth + wallThickness),
+           glm::vec3(length / 2, tunnelHeight + 0.01f + stripeThickness, -tunnelWidth + wallThickness + stripeWidth),
            stripeColor);
 
     // Dunga Dreapta sus
     AddBox(vertices, indices,
-           glm::vec3(-length / 2, tunnelHeight + 0.01f, tunnelWidth - 0.15f - stripeWidth),
-           glm::vec3(length / 2, tunnelHeight + 0.01f + stripeThickness, tunnelWidth - 0.15f),
+           glm::vec3(-length / 2, tunnelHeight + 0.01f, tunnelWidth - wallThickness - stripeWidth),
+           glm::vec3(length / 2, tunnelHeight + 0.01f + stripeThickness, tunnelWidth - wallThickness),
            stripeColor);
 
     Mesh *rail = new Mesh(name);
     rail->InitFromData(vertices, indices);
     return rail;
 }
+Mesh *object3D::CreateCube(
+    const std::string &name,
+    glm::vec3 center,
+    float size,
+    glm::vec3 color,
+    bool hasBlackBorder)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    float halfSize = size / 2.0f;
+    glm::vec3 minPoint = center - glm::vec3(halfSize);
+    glm::vec3 maxPoint = center + glm::vec3(halfSize);
+
+    AddBox(vertices, indices, minPoint, maxPoint, color, hasBlackBorder);
+
+    Mesh *cube = new Mesh(name);
+    cube->InitFromData(vertices, indices);
+    return cube;
+}
+
+Mesh *object3D::CreatePyramidMesh(
+    const std::string &name,
+    glm::vec3 baseCenter,
+    float baseSize,
+    float height,
+    glm::vec3 color,
+    bool hasBlackBorder)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    AddPyramid(vertices, indices, baseCenter, baseSize, height, color, hasBlackBorder);
+
+    Mesh *pyramid = new Mesh(name);
+    pyramid->InitFromData(vertices, indices);
+    return pyramid;
+}
+
+Mesh *object3D::CreateSphere(
+    const std::string &name,
+    glm::vec3 center,
+    float radius,
+    glm::vec3 color,
+    bool hasBlackBorder)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    AddSphere(vertices, indices, center, radius, color, 16, 16, hasBlackBorder);
+
+    Mesh *sphere = new Mesh(name);
+    sphere->InitFromData(vertices, indices);
+    return sphere;
+}
+
 Mesh *object3D::CreateBridgeRail(
     const std::string &name,
     glm::vec3 railColor,
@@ -1269,6 +1458,601 @@ Mesh *object3D::CreateBridgeRail(
     {
         float xPos = -length / 2 + i * spacing;
         // Dunga transversală pe pod
+        AddBox(vertices, indices,
+               glm::vec3(xPos - 0.03f, bridgeTopPlatform + 0.01f, -bridgeWidth * 0.9f),
+               glm::vec3(xPos + 0.03f, bridgeTopPlatform + 0.02f, bridgeWidth * 0.9f),
+               stripeColor);
+    }
+
+    Mesh *rail = new Mesh(name);
+    rail->InitFromData(vertices, indices);
+    return rail;
+}
+
+// ==================== INTERSECTION RAIL MESHES ====================
+// These are special meshes for intersections where rails connect from multiple directions.
+// Rails are only drawn on edges where connections exist (hasNorth, hasSouth, hasEast, hasWest).
+// Directions: North (+Z), South (-Z), East (+X), West (-X)
+
+Mesh *object3D::CreateNormalRailIntersection(
+    const std::string &name,
+    glm::vec3 railColor,
+    bool hasNorth, bool hasSouth, bool hasEast, bool hasWest)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    float length = 2.0f;
+    float halfLen = length / 2.0f;
+    float railWidth = 0.05f;
+    float railHeight = 0.08f;
+    float railPos = 0.30f; // distance from center for both rail pairs
+
+    // Traverse (Sleepers) - in the center, always present
+    glm::vec3 sleeperColor(0.5f, 0.3f, 0.1f);
+
+    // Add sleepers based on which directions have rails
+    if (hasEast || hasWest)
+    {
+        // Horizontal sleepers for E-W direction
+        int numSleepers = 3;
+        float step = length / (numSleepers + 1);
+        for (int i = 1; i <= numSleepers; i++)
+        {
+            float x = -halfLen + i * step;
+            if (x > -halfLen * 0.4f && x < halfLen * 0.4f) // only in center area
+            {
+                AddBox(vertices, indices,
+                       glm::vec3(x - 0.05f, 0.0f, -railPos - railWidth - 0.1f),
+                       glm::vec3(x + 0.05f, railHeight * 0.5f, railPos + railWidth + 0.1f),
+                       sleeperColor);
+            }
+        }
+    }
+
+    if (hasNorth || hasSouth)
+    {
+        // Vertical sleepers for N-S direction
+        int numSleepers = 3;
+        float step = length / (numSleepers + 1);
+        for (int i = 1; i <= numSleepers; i++)
+        {
+            float z = -halfLen + i * step;
+            if (z > -halfLen * 0.4f && z < halfLen * 0.4f) // only in center area
+            {
+                AddBox(vertices, indices,
+                       glm::vec3(-railPos - railWidth - 0.1f, 0.0f, z - 0.05f),
+                       glm::vec3(railPos + railWidth + 0.1f, railHeight * 0.5f, z + 0.05f),
+                       sleeperColor);
+            }
+        }
+    }
+
+    // === RAIL LOGIC ===
+    // For East-West direction: rails run along X axis at Z = ±railPos
+    // For North-South direction: rails run along Z axis at X = ±railPos
+    // Rails must extend to the edge of the mesh (halfLen) to connect with adjacent rail segments
+
+    // East-West rails (Z = ±railPos, extending in X direction)
+    if (hasEast && hasWest)
+    {
+        // Full E-W rails from edge to edge
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasEast)
+    {
+        // Only East - rails from center area to East edge
+        // Start from -railPos to connect with N-S rails if they exist
+        float startX = (hasNorth || hasSouth) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasWest)
+    {
+        // Only West - rails from West edge to center area
+        float endX = (hasNorth || hasSouth) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(endX, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(endX, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // North-South rails (X = ±railPos, extending in Z direction)
+    if (hasNorth && hasSouth)
+    {
+        // Full N-S rails from edge to edge
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasNorth)
+    {
+        // Only North - rails from center area to North edge
+        float startZ = (hasEast || hasWest) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, startZ),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, startZ),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasSouth)
+    {
+        // Only South - rails from South edge to center area
+        float endZ = (hasEast || hasWest) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, endZ),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, endZ),
+               railColor);
+    }
+
+    // Corner connectors - short perpendicular segments to connect turning rails
+    // These allow the train wheels to transition between directions
+    float cornerSize = railPos + railWidth;
+
+    // If can go East and North - need connector at +X,+Z corner
+    if (hasEast && hasNorth)
+    {
+        // Horizontal segment at +Z connecting E-W rail to N-S rail
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasEast && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // Cross bars for 3+ way intersections
+    // These connect the parallel rails across the intersection
+    int numDirections = (hasEast ? 1 : 0) + (hasWest ? 1 : 0) + (hasNorth ? 1 : 0) + (hasSouth ? 1 : 0);
+
+    if (numDirections >= 3)
+    {
+        // Horizontal bar at Z = +railPos (north side) - connects left N-S rail to right N-S rail
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+
+        // Horizontal bar at Z = -railPos (south side) - connects left N-S rail to right N-S rail
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+
+        // Vertical bar at X = +railPos (east side) - connects front E-W rail to back E-W rail
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+
+        // Vertical bar at X = -railPos (west side) - connects front E-W rail to back E-W rail
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+
+    Mesh *rail = new Mesh(name);
+    rail->InitFromData(vertices, indices);
+    return rail;
+}
+
+Mesh *object3D::CreateTunnelRailIntersection(
+    const std::string &name,
+    glm::vec3 railColor,
+    glm::vec3 tunnelColor,
+    bool hasNorth, bool hasSouth, bool hasEast, bool hasWest)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    float length = 2.0f;
+    float halfLen = length / 2.0f;
+    float railWidth = 0.05f;
+    float railHeight = 0.08f;
+    float railPos = 0.30f;
+
+    // === RAIL LOGIC (same as normal intersection) ===
+    // East-West rails
+    if (hasEast && hasWest)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasEast)
+    {
+        float startX = (hasNorth || hasSouth) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasWest)
+    {
+        float endX = (hasNorth || hasSouth) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(endX, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(endX, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // North-South rails
+    if (hasNorth && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasNorth)
+    {
+        float startZ = (hasEast || hasWest) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, startZ),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, startZ),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasSouth)
+    {
+        float endZ = (hasEast || hasWest) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, endZ),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, endZ),
+               railColor);
+    }
+
+    // Corner connectors
+    if (hasEast && hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasEast && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // === TUNNEL STRUCTURE ===
+    // Use same dimensions as regular tunnel for alignment
+    float tunnelHeight = 2.0f;
+    float tunnelWidth = 1.2f;
+    float wallThickness = 0.3f;
+
+    // Walls - only where there are NO connections, positioned to align with regular tunnel
+    // All walls use tunnelWidth as the extent to make the intersection square
+    // South wall (-Z side)
+    if (!hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, 0.0f, -tunnelWidth),
+               glm::vec3(tunnelWidth, tunnelHeight, -tunnelWidth + wallThickness),
+               tunnelColor);
+    }
+
+    // North wall (+Z side)
+    if (!hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, 0.0f, tunnelWidth - wallThickness),
+               glm::vec3(tunnelWidth, tunnelHeight, tunnelWidth),
+               tunnelColor);
+    }
+
+    // West wall (-X side)
+    if (!hasWest)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, 0.0f, -tunnelWidth),
+               glm::vec3(-tunnelWidth + wallThickness, tunnelHeight, tunnelWidth),
+               tunnelColor);
+    }
+
+    // East wall (+X side)
+    if (!hasEast)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(tunnelWidth - wallThickness, 0.0f, -tunnelWidth),
+               glm::vec3(tunnelWidth, tunnelHeight, tunnelWidth),
+               tunnelColor);
+    }
+
+    // Ceiling - covers the full intersection area (square)
+    AddBox(vertices, indices,
+           glm::vec3(-tunnelWidth, tunnelHeight - wallThickness, -tunnelWidth),
+           glm::vec3(tunnelWidth, tunnelHeight, tunnelWidth),
+           tunnelColor);
+
+    // White stripes on ceiling
+    glm::vec3 stripeColor(1.0f, 1.0f, 1.0f);
+    float stripeWidth = 0.08f;
+    float stripeThickness = 0.02f;
+
+    // Longitudinal stripes (along X axis) - only if that side has a connection (no wall)
+    if (hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, tunnelHeight + 0.01f, -tunnelWidth + wallThickness),
+               glm::vec3(tunnelWidth, tunnelHeight + 0.01f + stripeThickness, -tunnelWidth + wallThickness + stripeWidth),
+               stripeColor);
+    }
+    if (hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, tunnelHeight + 0.01f, tunnelWidth - wallThickness - stripeWidth),
+               glm::vec3(tunnelWidth, tunnelHeight + 0.01f + stripeThickness, tunnelWidth - wallThickness),
+               stripeColor);
+    }
+
+    // Perpendicular stripes above walls (where there's no connection)
+    // North wall stripe (horizontal along X, at +Z edge)
+    if (!hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, tunnelHeight + 0.01f, tunnelWidth - wallThickness - stripeWidth),
+               glm::vec3(tunnelWidth, tunnelHeight + 0.01f + stripeThickness, tunnelWidth - wallThickness),
+               stripeColor);
+    }
+    // South wall stripe (horizontal along X, at -Z edge)
+    if (!hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth, tunnelHeight + 0.01f, -tunnelWidth + wallThickness),
+               glm::vec3(tunnelWidth, tunnelHeight + 0.01f + stripeThickness, -tunnelWidth + wallThickness + stripeWidth),
+               stripeColor);
+    }
+    // West wall stripe (vertical along Z, at -X edge)
+    if (!hasWest)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-tunnelWidth + wallThickness, tunnelHeight + 0.01f, -tunnelWidth),
+               glm::vec3(-tunnelWidth + wallThickness + stripeWidth, tunnelHeight + 0.01f + stripeThickness, tunnelWidth),
+               stripeColor);
+    }
+    // East wall stripe (vertical along Z, at +X edge)
+    if (!hasEast)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(tunnelWidth - wallThickness - stripeWidth, tunnelHeight + 0.01f, -tunnelWidth),
+               glm::vec3(tunnelWidth - wallThickness, tunnelHeight + 0.01f + stripeThickness, tunnelWidth),
+               stripeColor);
+    }
+
+    Mesh *rail = new Mesh(name);
+    rail->InitFromData(vertices, indices);
+    return rail;
+}
+
+Mesh *object3D::CreateBridgeRailIntersection(
+    const std::string &name,
+    glm::vec3 railColor,
+    glm::vec3 bridgeColor,
+    bool hasNorth, bool hasSouth, bool hasEast, bool hasWest)
+{
+    std::vector<VertexFormat> vertices;
+    std::vector<unsigned int> indices;
+
+    float length = 2.0f;
+    float halfLen = length / 2.0f;
+    float railWidth = 0.05f;
+    float railHeight = 0.08f;
+    float railPos = 0.30f;
+
+    // Bridge platform (always present)
+    float bridgeTopPlatform = 0.02f;
+    float bridgeThickness = 0.06f;
+    float bridgeWidth = 1.0f;
+
+    AddBox(vertices, indices,
+           glm::vec3(-halfLen, bridgeTopPlatform - bridgeThickness, -bridgeWidth),
+           glm::vec3(halfLen, bridgeTopPlatform, bridgeWidth),
+           bridgeColor);
+
+    // === RAIL LOGIC (same as normal intersection) ===
+    // East-West rails
+    if (hasEast && hasWest)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasEast)
+    {
+        float startX = (hasNorth || hasSouth) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, railPos - railWidth),
+               glm::vec3(halfLen, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(startX, 0.0f, -railPos - railWidth),
+               glm::vec3(halfLen, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    else if (hasWest)
+    {
+        float endX = (hasNorth || hasSouth) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, railPos - railWidth),
+               glm::vec3(endX, railHeight, railPos + railWidth),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-halfLen, 0.0f, -railPos - railWidth),
+               glm::vec3(endX, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // North-South rails
+    if (hasNorth && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasNorth)
+    {
+        float startZ = (hasEast || hasWest) ? -railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, startZ),
+               glm::vec3(railPos + railWidth, railHeight, halfLen),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, startZ),
+               glm::vec3(-railPos + railWidth, railHeight, halfLen),
+               railColor);
+    }
+    else if (hasSouth)
+    {
+        float endZ = (hasEast || hasWest) ? railPos : 0.0f;
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(railPos + railWidth, railHeight, endZ),
+               railColor);
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -halfLen),
+               glm::vec3(-railPos + railWidth, railHeight, endZ),
+               railColor);
+    }
+
+    // Corner connectors
+    if (hasEast && hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasEast && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasNorth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, railPos + railWidth),
+               railColor);
+    }
+    if (hasWest && hasSouth)
+    {
+        AddBox(vertices, indices,
+               glm::vec3(-railPos - railWidth, 0.0f, -railPos - railWidth),
+               glm::vec3(-railPos + railWidth, railHeight, -railPos + railWidth),
+               railColor);
+    }
+
+    // White stripes on bridge
+    glm::vec3 stripeColor(1.0f, 1.0f, 1.0f);
+    int numStripes = 6;
+    float spacing = length / (numStripes + 1);
+
+    for (int i = 1; i <= numStripes; i++)
+    {
+        float xPos = -halfLen + i * spacing;
         AddBox(vertices, indices,
                glm::vec3(xPos - 0.03f, bridgeTopPlatform + 0.01f, -bridgeWidth * 0.9f),
                glm::vec3(xPos + 0.03f, bridgeTopPlatform + 0.02f, bridgeWidth * 0.9f),

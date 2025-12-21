@@ -2,6 +2,8 @@
 #include "lab_m1/Train-Geeks/object3D.cpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
@@ -43,7 +45,7 @@ namespace m1
 
     void Tema2::Init()
     {
-        // Text renderer for ending screen
+        // Text renderer for ending screen and HUD
         glm::ivec2 resolution = window ? window->GetResolution() : glm::ivec2(1280, 720);
         delete textRenderer;
         textRenderer = new gfxc::TextRenderer(window->props.selfDir, resolution.x, resolution.y);
@@ -51,39 +53,33 @@ namespace m1
 
         camera = new implemented::Camera();
         camera->Set(glm::vec3(0, 3, 7), glm::vec3(0, 1, 0), glm::vec3(0, 1, 0));
-        // Compute a safe aspect ratio (avoid zero / near-epsilon values that trigger GLM asserts)
-        float aspectInit = 16.0f / 9.0f; // default fallback
+
+        float aspectInit = 16.0f / 9.0f;
         if (window)
         {
             const auto &res = window->props.resolution;
             if (res.y != 0)
-            {
                 aspectInit = static_cast<float>(res.x) / static_cast<float>(res.y);
-            }
             else if (std::abs(window->props.aspectRatio) > std::numeric_limits<float>::epsilon())
-            {
                 aspectInit = window->props.aspectRatio;
-            }
         }
         if (std::abs(aspectInit) <= std::numeric_limits<float>::epsilon())
             aspectInit = 1.0f;
 
         projectionMatrix = glm::perspective(fovY, aspectInit, zNear, zFar);
 
-        // initialize camera toggle saved state
         cameraCentered = false;
         if (camera)
         {
-            // in viitor vreau ca pozitia (si nu numai) sa fie cea care corespunde locomotivei in miscare
             savedCamPos = camera->position;
             savedCamForward = camera->forward;
             savedCamUp = camera->up;
             savedDistanceToTarget = camera->distanceToTarget;
-            // initial centered offset (relative to locomotive at origin)
             glm::vec3 locoPosInit = glm::vec3(0.0f, 0.6f, 0.0f);
             centeredOffset = savedCamPos - locoPosInit;
         }
 
+        // --- MESH CREATION ---
         Mesh *ground = object3D::CreateGround("ground", 100.0f, glm::vec3(0.4f, 0.8f, 0.4f));
         AddMeshToList(ground);
 
@@ -123,10 +119,54 @@ namespace m1
         Mesh *bridgeRail = object3D::CreateBridgeRail("bridgeRail", glm::vec3(0.3f, 0.3f, 0.3f), glm::vec3(0.5f, 0.4f, 0.3f), 10.0f);
         AddMeshToList(bridgeRail);
 
-        // Build bidirectional rail network as linked rails between intersections (simple local storage)
-        static std::vector<Rail> rails;
-        rails.clear();
-        rails.reserve(32);
+        // 1. Cerc Turcuaz (Sfera)
+        Mesh *mapCircle = object3D::CreateCircle("map_circle", glm::vec3(0, 1, 1));
+        AddMeshToList(mapCircle);
+
+        // 2. Triunghi Verde (Piramida)
+        Mesh *mapTriangle = object3D::CreateTriangle("map_triangle", glm::vec3(0, 1, 0));
+        AddMeshToList(mapTriangle);
+
+        // 3. Pătrat Albastru (Cub)
+        Mesh *mapSquare = object3D::CreateSquare("map_square", glm::vec3(0, 0, 1));
+        AddMeshToList(mapSquare);
+
+        // 4. Stea Mov (Gara Centrală)
+        Mesh *mapStar = object3D::CreateStar("map_star", glm::vec3(0.6f, 0.0f, 0.8f));
+        AddMeshToList(mapStar);
+
+        // 5. Săgeată și Tren
+        Mesh *mapArrow = object3D::CreateArrow("map_arrow", glm::vec3(1, 1, 1));
+        AddMeshToList(mapArrow);
+
+        Mesh *mapTrain = object3D::CreateSquare("map_train", glm::vec3(1.0f, 1.0f, 0.3f));
+        AddMeshToList(mapTrain);
+
+        // 6. Stripe pentru pod (Pătrat Alb) - ADAUGAT PENTRU MINIMAP
+        Mesh *mapStripe = object3D::CreateSquare("map_stripe", glm::vec3(1, 1, 1));
+        AddMeshToList(mapStripe);
+
+        // --- INTERSECTIONS ---
+        glm::vec3 railCol(0.3f, 0.3f, 0.3f);
+        glm::vec3 tunnelCol(0.2f, 0.2f, 0.25f);
+        glm::vec3 bridgeCol(0.5f, 0.4f, 0.3f);
+
+        AddMeshToList(object3D::CreateNormalRailIntersection("intNormal_-20_-20", railCol, true, false, true, false));
+        AddMeshToList(object3D::CreateNormalRailIntersection("intNormal_-20_20", railCol, false, true, true, false));
+        AddMeshToList(object3D::CreateBridgeRailIntersection("intBridge_38_-20", railCol, bridgeCol, true, false, false, true));
+        AddMeshToList(object3D::CreateBridgeRailIntersection("intBridge_38_20", railCol, bridgeCol, false, true, false, true));
+        AddMeshToList(object3D::CreateTunnelRailIntersection("intTunnel_-20_0", railCol, tunnelCol, true, true, true, false));
+        AddMeshToList(object3D::CreateBridgeRailIntersection("intBridge_38_0", railCol, bridgeCol, true, true, false, true));
+
+        // Intersectiile centrale
+        AddMeshToList(object3D::CreateNormalRailIntersection("intNormal_2.5_-20", railCol, true, false, true, true));
+        AddMeshToList(object3D::CreateNormalRailIntersection("intNormal_2.5_20", railCol, false, true, true, true));
+        AddMeshToList(object3D::CreateNormalRailIntersection("intNormal_2.5_0", railCol, true, true, true, true));
+
+        // --- RAIL NETWORK BUILD ---
+        static std::vector<Rail> rails_local;
+        rails_local.clear();
+        rails_local.reserve(32);
 
         auto closeEnough = [](const glm::vec3 &a, const glm::vec3 &b, float eps = 0.01f)
         {
@@ -135,13 +175,13 @@ namespace m1
 
         auto makeRail = [&](const glm::vec3 &start, const glm::vec3 &end) -> Rail *
         {
-            rails.push_back({});
-            Rail &rail = rails.back();
+            rails_local.push_back({});
+            Rail &rail = rails_local.back();
             rail.startPosition = start;
             rail.endPosition = end;
             glm::vec3 delta = end - start;
             rail.length = glm::length(delta);
-            rail.dir = (rail.length > 0.0f) ? delta / rail.length : glm::vec3(0.0f, 0.0f, 0.0f);
+            rail.dir = (rail.length > 0.0f) ? delta / rail.length : glm::vec3(0.0f);
             return &rail;
         };
 
@@ -151,7 +191,6 @@ namespace m1
             makeRail(b, a);
         };
 
-        // Intersections (x,z): (-20, -20/0/20), (2.5, -20/0/20), (38, -20/0/20)
         glm::vec3 i1(-20.0f, 0.0f, -20.0f);
         glm::vec3 i2(-20.0f, 0.0f, 0.0f);
         glm::vec3 i3(-20.0f, 0.0f, 20.0f);
@@ -162,14 +201,12 @@ namespace m1
         glm::vec3 i8(38.0f, 0.0f, 0.0f);
         glm::vec3 i9(38.0f, 0.0f, 20.0f);
 
-        // Vertical segments
         addPair(i1, i2);
         addPair(i2, i3);
         addPair(i4, i5);
         addPair(i5, i6);
         addPair(i7, i8);
         addPair(i8, i9);
-        // Horizontal segments
         addPair(i1, i4);
         addPair(i4, i7);
         addPair(i2, i5);
@@ -177,11 +214,11 @@ namespace m1
         addPair(i3, i6);
         addPair(i6, i9);
 
-        // Link next rails automatically: any rail ending at a node connects to rails starting at that node
-        for (auto &r : rails)
+        // Link rails
+        for (auto &r : rails_local)
         {
             r.nextRails.clear();
-            for (auto &candidate : rails)
+            for (auto &candidate : rails_local)
             {
                 if (&r == &candidate)
                     continue;
@@ -192,9 +229,9 @@ namespace m1
             }
         }
 
-        // Initialize train on the mountain-area intersection along z = 0 (i2 -> i5)
+        // Init Train
         Rail *startRail = nullptr;
-        for (auto &r : rails)
+        for (auto &r : rails_local)
         {
             if (closeEnough(r.startPosition, i2) && closeEnough(r.endPosition, i5))
             {
@@ -202,9 +239,7 @@ namespace m1
                 break;
             }
         }
-
-        // Fallback to first rail if the specific one is not found
-        train.rail = startRail ? startRail : (rails.empty() ? nullptr : &rails.front());
+        train.rail = startRail ? startRail : (rails_local.empty() ? nullptr : &rails_local.front());
         train.progress = 0.0f;
         train.speed = 4.0f;
         train.position = train.rail ? train.rail->startPosition : glm::vec3(0.0f);
@@ -212,6 +247,48 @@ namespace m1
         train.yaw = DirToYaw(train.direction);
         train.numWagons = 2;
         train.waitingAtIntersection = false;
+
+        // --- INIT SYMBOLS ---
+        srand(static_cast<unsigned int>(time(nullptr)));
+        glm::vec3 baseColors[3] = {
+            glm::vec3(0.0f, 0.0f, 1.0f), // blue
+            glm::vec3(0.0f, 1.0f, 0.0f), // green
+            glm::vec3(0.0f, 1.0f, 1.0f)  // cyan
+        };
+
+        // Inițializare variabile logica de joc
+        currentSymbolCount = 5;
+        symbolsCollected = 0;
+        collectingSymbol = false;
+        collectTimer = 0.0f;
+        symbolsToCollect = 0;
+        isDelivering = false; // Folosim asta ca flag pentru faza de întoarcere
+
+        symbolTypes.resize(currentSymbolCount);
+        symbolOriginalColors.resize(currentSymbolCount);
+
+        for (int i = 0; i < currentSymbolCount; i++)
+        {
+            symbolTypes[i] = rand() % 3;
+            symbolOriginalColors[i] = baseColors[symbolTypes[i]];
+            std::string meshName = "symbol" + std::to_string(i);
+            float symbolSize = 1.0f;
+            glm::vec3 center(0.0f);
+            switch (symbolTypes[i])
+            {
+            case 0:
+                AddMeshToList(object3D::CreateCube(meshName, center, symbolSize, symbolOriginalColors[i], true));
+                break;
+            case 1:
+                AddMeshToList(object3D::CreatePyramidMesh(meshName, center - glm::vec3(0.0f, symbolSize / 2.0f, 0.0f), symbolSize, symbolSize, symbolOriginalColors[i], true));
+                break;
+            case 2:
+                AddMeshToList(object3D::CreateSphere(meshName, center, symbolSize * 0.5f, symbolOriginalColors[i], true));
+                break;
+            }
+        }
+
+        symbolsInitialized = true;
     }
 
     void Tema2::FrameStart()
@@ -240,13 +317,73 @@ namespace m1
 
     void Tema2::RenderRailAt(const glm::vec3 &pos, bool rotate90)
     {
-        std::string meshName = getRailType(pos);
+        // Check if this position is an intersection point
+        // Intersections are at: x = {-20, 2.5, 38}, z = {-20, 0, 20}
+        auto isIntersection = [](float x, float z) -> bool
+        {
+            const float eps = 0.1f;
+            bool xMatch = (std::abs(x - (-20.0f)) < eps) || (std::abs(x - 2.5f) < eps) || (std::abs(x - 38.0f) < eps);
+            bool zMatch = (std::abs(z - (-20.0f)) < eps) || (std::abs(z - 0.0f) < eps) || (std::abs(z - 20.0f) < eps);
+            return xMatch && zMatch;
+        };
+
+        // Get intersection mesh name based on position and type
+        auto getIntersectionMeshName = [&](float x, float z) -> std::string
+        {
+            const float eps = 0.1f;
+            std::string railType = getRailType(pos);
+
+            // Determine which intersection
+            if (std::abs(x - (-20.0f)) < eps)
+            {
+                if (std::abs(z - (-20.0f)) < eps)
+                    return "intNormal_-20_-20";
+                if (std::abs(z - 0.0f) < eps)
+                    return "intTunnel_-20_0";
+                if (std::abs(z - 20.0f) < eps)
+                    return "intNormal_-20_20";
+            }
+            if (std::abs(x - 2.5f) < eps)
+            {
+                if (std::abs(z - (-20.0f)) < eps)
+                    return "intNormal_2.5_-20";
+                if (std::abs(z - 0.0f) < eps)
+                    return "intNormal_2.5_0";
+                if (std::abs(z - 20.0f) < eps)
+                    return "intNormal_2.5_20";
+            }
+            if (std::abs(x - 38.0f) < eps)
+            {
+                if (std::abs(z - (-20.0f)) < eps)
+                    return "intBridge_38_-20";
+                if (std::abs(z - 0.0f) < eps)
+                    return "intBridge_38_0";
+                if (std::abs(z - 20.0f) < eps)
+                    return "intBridge_38_20";
+            }
+            return "";
+        };
+
+        std::string meshName;
+        bool useIntersectionMesh = false;
+
+        if (isIntersection(pos.x, pos.z))
+        {
+            meshName = getIntersectionMeshName(pos.x, pos.z);
+            useIntersectionMesh = !meshName.empty() && meshes.count(meshName);
+        }
+
+        if (!useIntersectionMesh)
+        {
+            meshName = getRailType(pos);
+        }
 
         if (meshes.count(meshName))
         {
             glm::mat4 model = glm::mat4(1);
             model = glm::translate(model, pos);
-            if (rotate90)
+            // Intersection meshes don't need rotation - they handle all directions
+            if (rotate90 && !useIntersectionMesh)
             {
                 model = model * transform3D::RotateOY(RADIANS(90.0f));
             }
@@ -266,11 +403,9 @@ namespace m1
             if (textRenderer)
             {
                 glm::ivec2 res = window ? window->GetResolution() : glm::ivec2(1280, 720);
-                const std::string msg = "The End";
-                // Scale text with resolution height (cap to reasonable limits)
+                const std::string msg = "GAME OVER";
                 float scale = glm::clamp(std::min(res.x, res.y) / 720.0f, 0.5f, 3.0f);
 
-                // Measure text width/height using glyph metrics for accurate centering
                 float textWidth = 0.0f;
                 float maxSizeY = 0.0f;
                 for (char c : msg)
@@ -279,11 +414,10 @@ namespace m1
                     if (it == textRenderer->Characters.end())
                         continue;
                     const auto &ch = it->second;
-                    textWidth += (ch.Advance >> 6) * scale; // Advance is in 1/64 pixels
+                    textWidth += (ch.Advance >> 6) * scale;
                     maxSizeY = std::max(maxSizeY, static_cast<float>(ch.Size.y));
                 }
                 float textHeight = maxSizeY * scale;
-
                 float x = res.x * 0.5f - textWidth * 0.5f;
                 float y = res.y * 0.5f - textHeight * 0.5f;
                 textRenderer->RenderText(msg, x, y, scale, glm::vec3(1.0f, 0.0f, 0.0f));
@@ -296,22 +430,125 @@ namespace m1
             return;
         }
 
-        // If camera is centered on locomotive, update it to follow the locomotive
+        // Camera logic
         if (cameraCentered && camera)
         {
-            // compute camera position from the stored offset (allows orbiting)
             glm::vec3 camPos = train.position + centeredOffset;
             camera->Set(camPos, train.position, glm::vec3(0.0f, 1.0f, 0.0f));
             camera->distanceToTarget = glm::length(centeredOffset);
         }
 
-        // accumulate HUD timer when game is running
         elapsedTime += deltaTimeSeconds;
 
-        // std::cout << getRailType(camera->GetTargetPosition()) << std::endl;
+        // Station positions
+        glm::vec3 stationPositions[3] = {
+            glm::vec3(41.0f, 0.0f, -13.0f), // cubeStation
+            glm::vec3(7.5f, 0.0f, 17.5f),   // pyramidStation
+            glm::vec3(-23.0f, 0.0f, -13.0f) // sphereStation
+        };
+
+        // =========================================================
+        // === LOGICA DE JOC ===
+        // =========================================================
+
+        // 1. Cronometru Global
+        if (symbolsInitialized)
+        {
+            deliveryTimer += deltaTimeSeconds;
+            if (deliveryTimer >= maxDeliveryTime)
+            {
+                std::cout << ">>> TIMP EXPIRAT! GAME OVER." << std::endl;
+                endScreenActive = true;
+                timer = 0.0f;
+            }
+        }
+
+        // 2. Colectare Simboluri
+        if (collectingSymbol)
+        {
+            collectTimer += deltaTimeSeconds;
+            if (collectTimer >= kSymbolWaitTime)
+            {
+                symbolsCollected++;
+                symbolsToCollect--;
+                collectTimer = 0.0f;
+
+                if (symbolsToCollect <= 0)
+                {
+                    collectingSymbol = false;
+                }
+            }
+        }
+        else if (symbolsInitialized && symbolsCollected < currentSymbolCount)
+        {
+            int nextSymbolType = symbolTypes[symbolsCollected];
+            float dist = glm::length(glm::vec2(train.position.x, train.position.z) -
+                                     glm::vec2(stationPositions[nextSymbolType].x, stationPositions[nextSymbolType].z));
+
+            if (dist < kStationRadius)
+            {
+                int consecutiveCount = 0;
+                for (int j = symbolsCollected; j < currentSymbolCount; j++)
+                {
+                    if (symbolTypes[j] == nextSymbolType)
+                        consecutiveCount++;
+                    else
+                        break;
+                }
+                collectingSymbol = true;
+                collectTimer = 0.0f;
+                symbolsToCollect = consecutiveCount;
+            }
+        }
+
+        // 3. Logica de Retur la Bază
+        bool allCollected = (symbolsCollected >= currentSymbolCount);
+        if (allCollected)
+        {
+            float distToMain = glm::length(glm::vec2(train.position.x, train.position.z) - glm::vec2(-2.5f, 0.0f));
+            if (distToMain < 2.0f)
+            {
+                std::cout << ">>> COMANDA FINALIZATA! Generam nivelul urmator." << std::endl;
+                currentSymbolCount++;
+                deliveryTimer = 0.0f;
+
+                glm::vec3 baseColors[3] = {glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), glm::vec3(0, 1, 1)};
+                symbolTypes.resize(currentSymbolCount);
+                symbolOriginalColors.resize(currentSymbolCount);
+
+                for (int i = 0; i < currentSymbolCount; i++)
+                {
+                    symbolTypes[i] = rand() % 3;
+                    symbolOriginalColors[i] = baseColors[symbolTypes[i]];
+                    std::string meshName = "symbol" + std::to_string(i);
+                    float symbolSize = 1.0f;
+                    glm::vec3 center(0.0f);
+                    switch (symbolTypes[i])
+                    {
+                    case 0:
+                        AddMeshToList(object3D::CreateCube(meshName, center, symbolSize, symbolOriginalColors[i], true));
+                        break;
+                    case 1:
+                        AddMeshToList(object3D::CreatePyramidMesh(meshName, center - glm::vec3(0.0f, symbolSize / 2.0f, 0.0f), symbolSize, symbolSize, symbolOriginalColors[i], true));
+                        break;
+                    case 2:
+                        AddMeshToList(object3D::CreateSphere(meshName, center, symbolSize * 0.5f, symbolOriginalColors[i], true));
+                        break;
+                    }
+                }
+                symbolsCollected = 0;
+                symbolsToCollect = 0;
+                collectingSymbol = false;
+            }
+        }
+
+        // =========================================================
+        // === RANDARE ===
+        // =========================================================
 
         glm::mat4 modelMatrix = glm::mat4(1);
 
+        // Copaci
         for (float z = -50.0f; z <= 50.0f; z += 5.0f)
         {
             for (float x = -50.0f; x <= 50.0f; x += 5.0f)
@@ -324,18 +561,14 @@ namespace m1
             }
         }
 
-        modelMatrix = glm::mat4(1);
         RenderMesh(meshes["ground"], shaders["VertexColor"], glm::mat4(1));
-
         modelMatrix = transform3D::Translate(30.0f, 0.0f, 0.0f);
         RenderMesh(meshes["water"], shaders["VertexColor"], modelMatrix);
-
-        modelMatrix = glm::mat4(1);
         modelMatrix = transform3D::Translate(-15.0f, 0.0f, 0.0f);
         RenderMesh(meshes["mountain"], shaders["VertexColor"], modelMatrix);
 
-        // Advance train along current rail
-        if (train.rail && !train.waitingAtIntersection)
+        // --- TRAIN MOVEMENT LOGIC (FIXED) ---
+        if (train.rail && !train.waitingAtIntersection && !collectingSymbol)
         {
             float safeLength = std::max(train.rail->length - 2.0f * kStopOffset, 0.0001f);
             glm::vec3 startMove = train.rail->startPosition + train.rail->dir * kStopOffset;
@@ -345,30 +578,52 @@ namespace m1
 
             if (train.progress >= 1.0f)
             {
+                // Am ajuns la capătul șinei curente
                 train.progress = 1.0f;
                 train.position = endStop;
                 train.direction = train.rail->dir;
                 train.yaw = DirToYaw(train.direction);
 
-                const auto &choices = train.rail->nextRails;
-                if (choices.empty())
+                // Filtrăm opțiunile valide (excludem mersul direct înapoi)
+                std::vector<Rail *> validOptions;
+                for (Rail *nextR : train.rail->nextRails)
                 {
+                    // Calculăm dot product între direcția curentă și noua direcție
+                    float dot = glm::dot(train.rail->dir, nextR->dir);
+                    // Dacă dot > -0.75, înseamnă că nu e o întoarcere la 180 grade (care ar avea dot -1)
+                    if (dot > -0.75f)
+                    {
+                        validOptions.push_back(nextR);
+                    }
+                }
+
+                if (validOptions.empty())
+                {
+                    // Dead end
                     train.waitingAtIntersection = true;
                 }
-                else if (choices.size() == 1)
+                else if (validOptions.size() == 1)
                 {
-                    // Continue from the same offset distance on the next rail for a smooth handoff
-                    train.rail = choices[0];
+                    // O SINGURĂ opțiune validă (colț sau linie dreaptă) -> Continuăm automat
+                    train.rail = validOptions[0];
+
+                    // Recalculăm poziția pentru noua șină
                     float nextSafeLength = std::max(train.rail->length - 2.0f * kStopOffset, 0.0001f);
                     glm::vec3 nextStartMove = train.rail->startPosition + train.rail->dir * kStopOffset;
+
+                    // Proiectăm poziția curentă pe noua direcție pentru continuitate
                     float proj = glm::dot(train.position - nextStartMove, train.rail->dir);
-                    train.progress = proj / nextSafeLength; // may start slightly negative; Update will advance smoothly
-                    train.position = train.position;        // keep current spot to avoid visual jump
+                    train.progress = proj / nextSafeLength;
+
+                    // Actualizăm direcția și rotația imediat
                     train.direction = train.rail->dir;
                     train.yaw = DirToYaw(train.direction);
+
+                    // NU oprim trenul (waitingAtIntersection ramane false)
                 }
                 else
                 {
+                    // Intersecție reală (2 sau mai multe direcții posibile) -> STOP
                     train.waitingAtIntersection = true;
                 }
             }
@@ -380,7 +635,7 @@ namespace m1
             }
         }
 
-        // Render locomotive and wagons using current train state
+        // Render Train
         modelMatrix = glm::mat4(1);
         modelMatrix = transform3D::Translate(train.position.x, train.position.y, train.position.z) * transform3D::RotateOY(train.yaw);
         RenderMesh(meshes["locomotive"], shaders["VertexColor"], modelMatrix);
@@ -393,31 +648,66 @@ namespace m1
             modelMatrix = glm::mat4(1);
         }
 
-        modelMatrix = glm::mat4(1);
-        modelMatrix = transform3D::Translate(42.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(-90.0f));
+        // Render Stations
+        modelMatrix = transform3D::Translate(41.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(-90.0f));
         RenderMesh(meshes["cubeStation"], shaders["VertexColor"], modelMatrix);
-
-        modelMatrix = glm::mat4(1);
         modelMatrix = transform3D::Translate(7.5f, 0.0f, 17.5f);
         RenderMesh(meshes["pyramidStation"], shaders["VertexColor"], modelMatrix);
-
-        modelMatrix = glm::mat4(1);
-        modelMatrix = transform3D::Translate(-25.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(90.0f));
+        modelMatrix = transform3D::Translate(-23.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(90.0f));
         RenderMesh(meshes["sphereStation"], shaders["VertexColor"], modelMatrix);
-
-        modelMatrix = glm::mat4(1);
         modelMatrix = transform3D::Translate(0.0f, 0.0f, 2.5f) * transform3D::RotateOY(RADIANS(180.0f));
         RenderMesh(meshes["mainStation"], shaders["VertexColor"], modelMatrix);
+
+        // Render Symbols
+        if (symbolsInitialized)
+        {
+            float t = glm::clamp(deliveryTimer / maxDeliveryTime, 0.0f, 1.0f);
+            glm::vec3 redColor(1.0f, 0.0f, 0.0f);
+            glm::vec3 groupCenter(0.0f, 4.0f, 2.5f);
+            glm::vec3 toCamera = glm::normalize(glm::vec3(camera->position.x, 0.0f, camera->position.z) - glm::vec3(0.0f, 0.0f, 2.5f));
+            float yaw = std::atan2(toCamera.x, toCamera.z);
+            glm::vec3 rightDir = glm::vec3(-toCamera.z, 0.0f, toCamera.x);
+
+            int remainingSymbols = currentSymbolCount - symbolsCollected;
+            for (int i = symbolsCollected; i < currentSymbolCount; i++)
+            {
+                std::string meshName = "symbol" + std::to_string(i);
+                if (meshes.count(meshName) && meshes[meshName])
+                {
+                    Mesh *symbolMesh = meshes[meshName];
+                    glm::vec3 currentColor = glm::mix(symbolOriginalColors[i], redColor, t);
+                    for (auto &v : symbolMesh->vertices)
+                        if (glm::length(v.color) > 0.01f)
+                            v.color = currentColor;
+                    symbolMesh->InitFromData(symbolMesh->vertices, symbolMesh->indices);
+
+                    int displayIndex = i - symbolsCollected;
+                    float offset = -((displayIndex - (remainingSymbols - 1) / 2.0f) * 1.5f);
+                    glm::vec3 symbolPos = groupCenter + rightDir * offset;
+                    modelMatrix = transform3D::Translate(symbolPos.x, symbolPos.y, symbolPos.z) * transform3D::RotateOY(yaw);
+                    RenderMesh(symbolMesh, shaders["VertexColor"], modelMatrix);
+                }
+            }
+        }
+
+        // Render Rails
+        auto isIntersectionPos = [](float x, float z) -> bool
+        {
+            const float eps = 0.1f;
+            return ((std::abs(x - (-20.0f)) < eps) || (std::abs(x - 2.5f) < eps) || (std::abs(x - 38.0f) < eps)) &&
+                   ((std::abs(z - (-20.0f)) < eps) || (std::abs(z - 0.0f) < eps) || (std::abs(z - 20.0f) < eps));
+        };
 
         float xLines[3] = {-20.0f, 2.5f, 38.0f};
         for (float xVal : xLines)
         {
             for (float z = -20.0f; z <= 20.0f; z += 2.0f)
             {
+                if (isIntersectionPos(xVal, z) && std::abs(xVal - 2.5f) > 0.01f)
+                    continue;
                 RenderRailAt(glm::vec3(xVal, 0.0f, z), true);
             }
         }
-
         float zLines[3] = {-20.0f, 0.0f, 20.0f};
         for (float zVal : zLines)
         {
@@ -425,6 +715,22 @@ namespace m1
             {
                 RenderRailAt(glm::vec3(x, 0.0f, zVal), false);
             }
+        }
+
+        // Text Return
+        if (allCollected && textRenderer && !endScreenActive)
+        {
+            float timeLeft = std::max(0.0f, 1 + maxDeliveryTime - deliveryTimer);
+            std::stringstream ss;
+            ss << "RETURN: " << (int)timeLeft << "s";
+            glm::vec3 pos(0.0f, 4.0f, 2.5f);
+            glm::vec4 clipSpace = projectionMatrix * camera->GetViewMatrix() * glm::vec4(pos, 1.0f);
+            if (clipSpace.w != 0.0f)
+                clipSpace /= clipSpace.w;
+            glm::ivec2 res = window->GetResolution();
+            float x = (clipSpace.x * 0.5f + 0.5f) * res.x;
+            float y = (1.0f - (clipSpace.y * 0.5f + 0.5f)) * res.y;
+            textRenderer->RenderText(ss.str(), x - 100, y - 30, 1.0f, glm::vec3(1.0f, 0.0f, 0.0f));
         }
     }
 
@@ -437,46 +743,37 @@ namespace m1
         if (window && !endScreenActive)
         {
             glm::ivec2 res = window->GetResolution();
-            int size = std::min(res.x, res.y) / 3;
+            int size = std::min(res.x, res.y) / 2;
+
             if (size > 8)
             {
                 int margin = minimapMargin;
                 int vpX = res.x - margin - size;
-                int vpY = margin; // bottom margin
+                int vpY = margin;
 
-                // Save previous viewport
                 GLint prevViewport[4];
                 glGetIntegerv(GL_VIEWPORT, prevViewport);
-
-                // Set new viewport for minimap
                 glViewport(vpX, vpY, size, size);
 
-                // Prepare an orthographic projection covering minimapWorldSize centered on locomotive
-                float halfWorld = minimapWorldSize * 0.5f;
-                glm::mat4 projMinimap = glm::ortho(-halfWorld, halfWorld, -halfWorld, halfWorld, -100.0f, 100.0f);
+                // Mărim zona vizibilă a hărții la 75 unități
+                float mapSize = 75.0f;
+                float halfSize = mapSize * 0.5f;
 
-                // Top-down view: center on the current 3D camera's XZ coordinates (projected onto X-OZ plane)
-                glm::vec3 center;
-                if (camera)
-                {
-                    center = glm::vec3(camera->position.x, 0.0f, camera->position.z);
-                }
-                else
-                {
-                    center = glm::vec3(0.0f, 0.0f, 0.0f); // fallback
-                }
-                glm::vec3 eye = center + glm::vec3(0.0f, minimapWorldSize, 0.0f);
-                glm::vec3 up = glm::vec3(0.0f, 0.0f, -1.0f); // make -Z point upwards on minimap
+                // Centrăm proiecția mai bine
+                glm::mat4 projMinimap = glm::ortho(-halfSize, halfSize, -halfSize, halfSize, -100.0f, 100.0f);
+
+                glm::vec3 center(10.0f, 0.0f, 0.0f);
+                glm::vec3 eye = center + glm::vec3(0.0f, 50.0f, 0.0f);
+                glm::vec3 up = glm::vec3(0.0f, 0.0f, -1.0f);
                 glm::mat4 viewMinimap = glm::lookAt(eye, center, up);
 
-                // Use the same shader as main rendering (VertexColor)
                 Shader *shader = shaders["VertexColor"];
                 if (shader && shader->program)
                 {
-                    // Enable depth test for correct occlusion in minimap
                     GLboolean depthEnabled;
                     glGetBooleanv(GL_DEPTH_TEST, &depthEnabled);
                     glEnable(GL_DEPTH_TEST);
+                    glClear(GL_DEPTH_BUFFER_BIT); // Important: curățăm depth buffer-ul local
 
                     shader->Use();
 
@@ -487,123 +784,204 @@ namespace m1
                         glUniformMatrix4fv(shader->loc_model_matrix, 1, GL_FALSE, glm::value_ptr(model));
                     };
 
-                    auto renderRailMini = [&](const glm::vec3 &pos, bool rotate90)
-                    {
-                        std::string meshName = getRailType(pos);
-                        if (!meshes.count(meshName))
-                            return;
-                        glm::mat4 m = glm::translate(glm::mat4(1), pos);
-                        if (rotate90)
-                            m = m * transform3D::RotateOY(RADIANS(90.0f));
-                        setUniforms(m);
-                        meshes[meshName]->Render();
-                    };
-
-                    // ground
-                    if (meshes.count("ground") && meshes["ground"])
+                    // --- 1. ELEMENTE DE MEDIU (Decor) ---
+                    if (meshes["ground"])
                     {
                         setUniforms(glm::mat4(1));
                         meshes["ground"]->Render();
                     }
-
-                    // water
-                    if (meshes.count("water") && meshes["water"])
+                    if (meshes["water"])
                     {
-                        glm::mat4 waterModel = glm::translate(glm::mat4(1), glm::vec3(30.0f, 0.0f, 0.0f));
-                        setUniforms(waterModel);
+                        setUniforms(transform3D::Translate(30.0f, 0.0f, 0.0f));
                         meshes["water"]->Render();
                     }
-
-                    // mountain
-                    if (meshes.count("mountain") && meshes["mountain"])
+                    if (meshes["mountain"])
                     {
-                        glm::mat4 mountainModel = glm::translate(glm::mat4(1), glm::vec3(-15.0f, 0.0f, 0.0f));
-                        setUniforms(mountainModel);
+                        setUniforms(transform3D::Translate(-15.0f, 0.0f, 0.0f));
                         meshes["mountain"]->Render();
                     }
 
-                    // trees (mirror main scene placement/exclusions)
-                    for (float z = -50.0f; z <= 50.0f; z += 5.0f)
+                    // Copaci (doar pe margini pentru a nu aglomera vizual)
+                    for (float z = -50.0f; z <= 50.0f; z += 15.0f)
                     {
-                        for (float x = -50.0f; x <= 50.0f; x += 5.0f)
+                        for (float x = -50.0f; x <= 50.0f; x += 15.0f)
                         {
-                            if (((z == 0.0f || z == 20.0f || z == -20.0f) && x >= -20.0f && x <= 38.0f) || ((x == -20.0f || x == 38.0f) && z >= -20.0f && z <= 20.0f))
-                                continue;
-                            glm::mat4 treeModel = transform3D::Translate(x, 0.0f, z);
-                            setUniforms(treeModel);
+                            if (abs(x) < 45 && abs(z) < 25)
+                                continue; // Zona centrală liberă
+                            setUniforms(transform3D::Translate(x, 0.0f, z));
                             meshes["tree"]->Render();
                         }
                     }
 
-                    // rails grid (same as main scene)
+                    // --- MODIFICARE: Randare Șine (Cu linii perpendiculare pentru pod) ---
+                    auto renderRailOnMinimap = [&](glm::vec3 pos, bool rotate90)
+                    {
+                        std::string name = getRailType(pos);
+
+                        if (name == "bridgeRail")
+                        {
+                            // Randăm linii albe perpendiculare (traverse dese)
+                            // Segmentul are lungime aprox 2.0. Desenăm 8 linii.
+                            int numStripes = 8;
+                            float segmentLength = 2.0f;
+                            float step = segmentLength / (float)numStripes;
+                            float startOffset = -segmentLength / 2.0f + step / 2.0f;
+
+                            if (meshes["map_stripe"])
+                            {
+                                for (int k = 0; k < numStripes; k++)
+                                {
+                                    float offset = startOffset + k * step;
+                                    glm::vec3 stripePos;
+                                    glm::vec3 scale;
+
+                                    if (rotate90)
+                                    {
+                                        // Șina e pe axa X. Liniile trebuie să fie perpendiculare (pe Z).
+                                        // offset-ul e pe X.
+                                        stripePos = pos + glm::vec3(offset, 0.5f, 0.0f);
+                                        // Scalăm pătratul: Subțire pe X (0.1), Lat pe Z (1.0)
+                                        scale = glm::vec3(0.05f, 0.5f, 0.5f); 
+                                    }
+                                    else
+                                    {
+                                        // Șina e pe axa Z. Liniile trebuie să fie perpendiculare (pe X).
+                                        // offset-ul e pe Z.
+                                        stripePos = pos + glm::vec3(0.0f, 0.5f, offset);
+                                        // Scalăm pătratul: Lat pe X (1.0), Subțire pe Z (0.1)
+                                        scale = glm::vec3(0.5f, 0.5f, 0.05f);
+                                    }
+
+                                    glm::mat4 m = glm::translate(glm::mat4(1), stripePos);
+                                    // Pătratul e în XY, îl culcăm pe XZ (rotate 90 OX)
+                                    m = m * transform3D::RotateOX(RADIANS(90.0f));
+                                    m = glm::scale(m, scale);
+                                    
+                                    setUniforms(m);
+                                    meshes["map_stripe"]->Render();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Șină normală sau tunel - comportament standard
+                            if (meshes[name])
+                            {
+                                glm::mat4 m = glm::translate(glm::mat4(1), pos);
+                                if (rotate90) m = m * transform3D::RotateOY(RADIANS(90.0f));
+                                setUniforms(m);
+                                meshes[name]->Render();
+                            }
+                        }
+                    };
+
                     float xLines[3] = {-20.0f, 2.5f, 38.0f};
                     for (float xVal : xLines)
                     {
                         for (float z = -20.0f; z <= 20.0f; z += 2.0f)
                         {
-                            renderRailMini(glm::vec3(xVal, 0.0f, z), true);
+                            if (std::abs(xVal - 2.5f) < 0.1f && (z < -20 || z > 20))
+                                continue;
+                            renderRailOnMinimap(glm::vec3(xVal, 0, z), true);
                         }
                     }
-
                     float zLines[3] = {-20.0f, 0.0f, 20.0f};
                     for (float zVal : zLines)
                     {
                         for (float x = -20.0f; x <= 38.0f; x += 2.0f)
                         {
-                            renderRailMini(glm::vec3(x, 0.0f, zVal), false);
+                            renderRailOnMinimap(glm::vec3(x, 0, zVal), false);
                         }
                     }
 
-                    // stations (match main scene transforms)
-                    if (meshes.count("cubeStation") && meshes["cubeStation"])
+                    // --- 2. SIMBOLURI STATICE ---
+                    
+                    // A. Gara Centrală -> STEA MOV
                     {
-                        glm::mat4 m = transform3D::Translate(42.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(-90.0f));
-                        setUniforms(m);
-                        meshes["cubeStation"]->Render();
-                    }
-                    if (meshes.count("pyramidStation") && meshes["pyramidStation"])
-                    {
-                        glm::mat4 m = transform3D::Translate(7.5f, 0.0f, 17.5f);
-                        setUniforms(m);
-                        meshes["pyramidStation"]->Render();
-                    }
-                    if (meshes.count("sphereStation") && meshes["sphereStation"])
-                    {
-                        glm::mat4 m = transform3D::Translate(-25.0f, 0.0f, -13.0f) * transform3D::RotateOY(RADIANS(90.0f));
-                        setUniforms(m);
-                        meshes["sphereStation"]->Render();
-                    }
-                    if (meshes.count("mainStation") && meshes["mainStation"])
-                    {
-                        glm::mat4 m = transform3D::Translate(0.0f, 0.0f, 2.5f) * transform3D::RotateOY(RADIANS(180.0f));
-                        setUniforms(m);
-                        meshes["mainStation"]->Render();
-                    }
+                        float ratio = 0.0f;
+                        if (maxDeliveryTime > 0.0f)
+                            ratio = glm::clamp(deliveryTimer / maxDeliveryTime, 0.0f, 1.0f);
 
-                    // locomotive and wagons (use actual train position)
-                    if (meshes.count("locomotive") && meshes["locomotive"])
-                    {
-                        glm::mat4 locoModel = transform3D::Translate(train.position.x, train.position.y, train.position.z) * transform3D::RotateOY(train.yaw);
-                        setUniforms(locoModel);
-                        meshes["locomotive"]->Render();
-                    }
-                    if (meshes.count("wagon") && meshes["wagon"])
-                    {
-                        for (int i = 0; i < train.numWagons; i++)
+                        Mesh *starMesh = meshes["map_star"];
+                        if (starMesh)
                         {
-                            glm::vec3 wagonPos = train.position - train.direction * wagonLength * static_cast<float>(i + 1);
-                            glm::mat4 wagonModel = transform3D::Translate(wagonPos.x, wagonPos.y, wagonPos.z) * transform3D::RotateOY(train.yaw);
-                            setUniforms(wagonModel);
-                            meshes["wagon"]->Render();
+                            for (auto &v : starMesh->vertices)
+                                v.color = glm::vec3(0.6f, 0.1f, 0.6f);
+                            starMesh->InitFromData(starMesh->vertices, starMesh->indices);
+
+                            glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(0.0f, 10.0f, 2.5f));
+                            model = glm::scale(model, glm::vec3(3.5f));
+                            model = model * transform3D::RotateOX(RADIANS(90.0f));
+                            setUniforms(model);
+                            starMesh->Render();
                         }
                     }
 
-                    // restore depth test state
+                    // B. Stația Cub (X=41) -> PĂTRAT ALBASTRU
+                    {
+                        glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(41.0f, 10.0f, -13.0f));
+                        model = glm::scale(model, glm::vec3(4.0f));
+                        model = model * transform3D::RotateOX(RADIANS(90.0f));
+                        setUniforms(model);
+                        if (meshes["map_square"])
+                            meshes["map_square"]->Render();
+                    }
+
+                    // C. Stația Piramidă (X=7.5) -> TRIUNGHI VERDE
+                    {
+                        glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(7.5f, 10.0f, 17.5f));
+                        model = glm::scale(model, glm::vec3(4.0f));
+                        model = model * transform3D::RotateOX(RADIANS(90.0f));
+                        setUniforms(model);
+                        if (meshes["map_triangle"])
+                            meshes["map_triangle"]->Render();
+                    }
+
+                    // D. Stația Sferă (X=-23) -> CERC TURCUAZ
+                    {
+                        glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(-23.0f, 10.0f, -13.0f));
+                        model = glm::scale(model, glm::vec3(3.0f));
+                        model = model * transform3D::RotateOX(RADIANS(90.0f));
+                        setUniforms(model);
+                        if (meshes["map_circle"])
+                            meshes["map_circle"]->Render();
+                    }
+
+                    // --- 3. ELEMENTE DINAMICE (Tren, Săgeată) ---
+
+                    // E. Trenul
+                    if (meshes["map_train"])
+                    {
+                        glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(train.position.x, 11.0f, train.position.z));
+                        model = glm::rotate(model, train.yaw + RADIANS(90.0f), glm::vec3(0, 1, 0));
+                        model = glm::scale(model, glm::vec3(2.0f, 1.0f, 5.0f));
+                        model = model * transform3D::RotateOX(RADIANS(90.0f));
+                        setUniforms(model);
+                        meshes["map_train"]->Render();
+                    }
+
+                    // F. Săgeată Cameră - !!! MODIFICARE: POZITIE CAMERA, NU TREN
+                    if (meshes["map_arrow"])
+                    {
+                        // Folosim poziția camerei (X, Z) și înălțimea fixă (12.0f)
+                        glm::mat4 model = glm::translate(glm::mat4(1), glm::vec3(camera->position.x, 12.0f, camera->position.z));
+
+                        // Orientarea săgeții trebuie să fie în funcție de direcția camerei
+                        glm::vec3 camDir = glm::normalize(glm::vec3(camera->forward.x, 0.0f, camera->forward.z));
+                        float arrowYaw = std::atan2(camDir.x, camDir.z) + RADIANS(180.0f);
+
+                        model = glm::rotate(model, arrowYaw, glm::vec3(0, 1, 0));
+                        model = model * transform3D::RotateOX(RADIANS(90.0f));
+                        model = model * transform3D::RotateOZ(RADIANS(180.0f));
+
+                        model = glm::scale(model, glm::vec3(4.0f));
+                        setUniforms(model);
+                        meshes["map_arrow"]->Render();
+                    }
+
                     if (!depthEnabled)
                         glDisable(GL_DEPTH_TEST);
                 }
-
-                // Restore previous viewport
                 glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
             }
 
@@ -635,7 +1013,6 @@ namespace m1
                     textWidth += (ch.Advance >> 6) * scale;
                     maxSizeY = std::max(maxSizeY, static_cast<float>(ch.Size.y));
                 }
-                float textHeight = maxSizeY * scale;
 
                 float x = res.x - minimapMargin - textWidth;
                 // Place at top-right with same margin as minimap (TextRenderer origin is top-left style)
@@ -742,7 +1119,7 @@ namespace m1
 
                     // trebuie sa adaug o animatie pentru fiecare componenta aici
                     if (rotate)
-                        train.progress = 1 / nextSafeLength;
+                        train.progress = 0.25f / nextSafeLength;
                     else
                         train.progress = proj / nextSafeLength;
 

@@ -248,7 +248,7 @@ void Editor::OnMouseScroll(int mouseX, int mouseY, int offsetX, int offsetY)
     }
 }
 
-void Editor::OnWindowResize(int width, int height) { }
+void Editor::OnWindowResize(int width, int height) {}
 
 bool Editor::checkReady(int mouseX, int mouseY)
 {
@@ -684,8 +684,9 @@ bool Editor::TryPlaceDraggedBlock(const glm::vec2 &scenePos)
         if (TryPlaceBumper(dropOrigin, candidate))
         {
             CommitBlockPlacement(candidate);
+            return true;
         }
-        return true;
+        return false;
     }
 
     int row = 0;
@@ -698,8 +699,9 @@ bool Editor::TryPlaceDraggedBlock(const glm::vec2 &scenePos)
         if (TryPlaceSolid(row, col, candidate))
         {
             CommitBlockPlacement(candidate);
+            return true;
         }
-        return true;
+        return false;
     }
 
     if (draggedBlock == CANNON && TryPlaceCannon(row, col, candidate))
@@ -708,7 +710,7 @@ bool Editor::TryPlaceDraggedBlock(const glm::vec2 &scenePos)
         return true;
     }
 
-    return true;
+    return false;
 }
 
 bool Editor::TryPlaceSolid(int row, int col, PlacedBlock &outBlock) const
